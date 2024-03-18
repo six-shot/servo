@@ -90,7 +90,7 @@ impl Worklet {
         Worklet {
             reflector: Reflector::new(),
             window: Dom::from_ref(window),
-            global_type: global_type,
+            global_type,
             droppable_field: DroppableField {
                 worklet_id: WorkletId::new(),
                 thread_pool: OnceCell::new(),
@@ -285,15 +285,15 @@ impl WorkletThreadPool {
             primary_sender: primary_sender.clone(),
             hot_backup_sender: hot_backup_sender.clone(),
             cold_backup_sender: cold_backup_sender.clone(),
-            global_init: global_init,
+            global_init,
         };
         WorkletThreadPool {
-            primary_sender: primary_sender,
-            hot_backup_sender: hot_backup_sender,
-            cold_backup_sender: cold_backup_sender,
-            control_sender_0: WorkletThread::spawn(primary_role, init.clone()),
-            control_sender_1: WorkletThread::spawn(hot_backup_role, init.clone()),
-            control_sender_2: WorkletThread::spawn(cold_backup_role, init),
+            primary_sender,
+            hot_backup_sender,
+            cold_backup_sender,
+            control_sender_0: WorkletThread::spawn(primary_role, init.clone(), 0),
+            control_sender_1: WorkletThread::spawn(hot_backup_role, init.clone(), 1),
+            control_sender_2: WorkletThread::spawn(cold_backup_role, init, 2),
         }
     }
 
@@ -320,13 +320,13 @@ impl WorkletThreadPool {
             &self.control_sender_2,
         ] {
             let _ = sender.send(WorkletControl::FetchAndInvokeAWorkletScript {
-                pipeline_id: pipeline_id,
-                worklet_id: worklet_id,
-                global_type: global_type,
+                pipeline_id,
+                worklet_id,
+                global_type,
                 origin: origin.clone(),
                 base_url: base_url.clone(),
                 script_url: script_url.clone(),
-                credentials: credentials,
+                credentials,
                 pending_tasks_struct: pending_tasks_struct.clone(),
                 promise: TrustedPromise::new(promise.clone()),
             });
@@ -405,8 +405,8 @@ impl WorkletThreadRole {
         WorkletThreadRole {
             sender: sender,
             receiver: receiver,
-            is_hot_backup: is_hot_backup,
-            is_cold_backup: is_cold_backup,
+            is_hot_backup,
+            is_cold_backup,
         }
     }
 }
@@ -464,32 +464,38 @@ impl WorkletThread {
     /// Spawn a new worklet thread, returning the channel to send it control messages.
     #[allow(unsafe_code)]
     #[allow(crown::unrooted_must_root)]
-    fn spawn(role: WorkletThreadRole, init: WorkletThreadInit) -> Sender<WorkletControl> {
+    fn spawn(
+        role: WorkletThreadRole,
+        init: WorkletThreadInit,
+        thread_index: u8,
+    ) -> Sender<WorkletControl> {
         let (control_sender, control_receiver) = unbounded();
-        // TODO: name this thread
-        thread::spawn(move || {
-            // TODO: add a new IN_WORKLET thread state?
-            // TODO: set interrupt handler?
-            // TODO: configure the JS runtime (e.g. discourage GC, encourage agressive JIT)
-            debug!("Initializing worklet thread.");
-            thread_state::initialize(ThreadState::SCRIPT | ThreadState::IN_WORKER);
-            let roots = RootCollection::new();
-            let _stack_roots = ThreadLocalStackRoots::new(&roots);
-            let mut thread = RootedTraceableBox::new(WorkletThread {
-                role: role,
-                control_receiver: control_receiver,
-                primary_sender: init.primary_sender,
-                hot_backup_sender: init.hot_backup_sender,
-                cold_backup_sender: init.cold_backup_sender,
-                global_init: init.global_init,
-                global_scopes: HashMap::new(),
-                control_buffer: None,
-                runtime: new_rt_and_cx(None),
-                should_gc: false,
-                gc_threshold: MIN_GC_THRESHOLD,
-            });
-            thread.run();
-        });
+        let _ = thread::Builder::new()
+            .name(format!("Worklet#{thread_index}"))
+            .spawn(move || {
+                // TODO: add a new IN_WORKLET thread state?
+                // TODO: set interrupt handler?
+                // TODO: configure the JS runtime (e.g. discourage GC, encourage agressive JIT)
+                debug!("Initializing worklet thread.");
+                thread_state::initialize(ThreadState::SCRIPT | ThreadState::IN_WORKER);
+                let roots = RootCollection::new();
+                let _stack_roots = ThreadLocalStackRoots::new(&roots);
+                let mut thread = RootedTraceableBox::new(WorkletThread {
+                    role,
+                    control_receiver,
+                    primary_sender: init.primary_sender,
+                    hot_backup_sender: init.hot_backup_sender,
+                    cold_backup_sender: init.cold_backup_sender,
+                    global_init: init.global_init,
+                    global_scopes: HashMap::new(),
+                    control_buffer: None,
+                    runtime: new_rt_and_cx(None),
+                    should_gc: false,
+                    gc_threshold: MIN_GC_THRESHOLD,
+                });
+                thread.run();
+            })
+            .expect("Couldn't start worklet thread");
         control_sender
     }
 
@@ -761,8 +767,8 @@ pub struct WorkletExecutor {
 impl WorkletExecutor {
     fn new(worklet_id: WorkletId, primary_sender: Sender<WorkletData>) -> WorkletExecutor {
         WorkletExecutor {
-            worklet_id: worklet_id,
-            primary_sender: primary_sender,
+            worklet_id,
+            primary_sender,
         }
     }
 

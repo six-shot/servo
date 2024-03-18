@@ -7,7 +7,7 @@ use std::mem;
 use std::sync::{Arc, Mutex};
 
 use canvas_traits::canvas::*;
-use cssparser::RGBA;
+use cssparser::RgbaLegacy;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D, Vector2D};
 use euclid::{point2, vec2};
 use font_kit::family_name::FamilyName;
@@ -74,7 +74,7 @@ impl PathState {
 pub trait Backend {
     fn get_composition_op(&self, opts: &DrawOptions) -> CompositionOp;
     fn need_to_draw_shadow(&self, color: &Color) -> bool;
-    fn set_shadow_color(&mut self, color: RGBA, state: &mut CanvasPaintState<'_>);
+    fn set_shadow_color(&mut self, color: RgbaLegacy, state: &mut CanvasPaintState<'_>);
     fn set_fill_style(
         &mut self,
         style: FillOrStrokeStyle,
@@ -114,6 +114,7 @@ pub trait GenericPathBuilder {
         control_point3: &Point2D<f32>,
     );
     fn close(&mut self);
+    #[allow(clippy::too_many_arguments)]
     fn ellipse(
         &mut self,
         origin: Point2D<f32>,
@@ -195,6 +196,7 @@ impl<'a> PathBuilderRef<'a> {
             .arc(center, radius, start_angle, end_angle, ccw);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn ellipse(
         &mut self,
         center: &Point2D<f32>,
@@ -499,8 +501,7 @@ impl<'a> CanvasData<'a> {
                         .first(font_context)
                         .expect("couldn't find font");
                     let font = font.borrow_mut();
-                    let template = font.handle.template();
-                    Font::from_bytes(Arc::new(template.bytes()), 0)
+                    Font::from_bytes(font.handle.template().bytes(), 0)
                         .ok()
                         .or_else(|| load_system_font_from_style(Some(style)))
                 })
@@ -978,6 +979,7 @@ impl<'a> CanvasData<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn ellipse(
         &mut self,
         center: &Point2D<f32>,
@@ -1154,7 +1156,7 @@ impl<'a> CanvasData<'a> {
         self.state.shadow_blur = value;
     }
 
-    pub fn set_shadow_color(&mut self, value: RGBA) {
+    pub fn set_shadow_color(&mut self, value: RgbaLegacy) {
         self.backend.set_shadow_color(value, &mut self.state);
     }
 

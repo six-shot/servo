@@ -218,8 +218,8 @@ impl EmbedderCoordinates {
     /// to the framebuffer with OpenGL commands.
     pub fn get_flipped_viewport(&self) -> DeviceIntRect {
         let fb_height = self.framebuffer.height;
-        let mut view = self.viewport.clone();
-        view.origin.y = fb_height - view.origin.y - view.size.height;
+        let mut view = self.viewport;
+        view.min.y = fb_height - view.min.y - view.size().height;
         DeviceIntRect::from_untyped(&view.to_untyped())
     }
 }

@@ -88,7 +88,7 @@ use surfman::{GLApi, GLVersion};
 #[cfg(target_os = "linux")]
 use surfman::{NativeConnection, NativeContext};
 use webrender::{RenderApiSender, ShaderPrecacheFlags};
-use webrender_api::{DocumentId, FontInstanceKey, FontKey, ImageKey};
+use webrender_api::{ColorF, DocumentId, FontInstanceKey, FontKey, FramePublishId, ImageKey};
 use webrender_traits::{
     WebrenderExternalImageHandlers, WebrenderExternalImageRegistry, WebrenderImageHandlerType,
 };
@@ -205,7 +205,7 @@ impl webrender_api::RenderNotifier for RenderNotifier {
         _document_id: DocumentId,
         _scrolled: bool,
         composite_needed: bool,
-        _render_time_ns: Option<u64>,
+        _frame_publish_id: FramePublishId,
     ) {
         self.compositor_proxy
             .send(CompositorMsg::NewWebRenderFrameReady(composite_needed));
@@ -310,7 +310,7 @@ where
 
         let coordinates: compositing::windowing::EmbedderCoordinates = window.get_coordinates();
         let device_pixel_ratio = coordinates.hidpi_factor.get();
-        let viewport_size = coordinates.viewport.size.to_f32() / device_pixel_ratio;
+        let viewport_size = coordinates.viewport.size().to_f32() / device_pixel_ratio;
 
         let (mut webrender, webrender_api_sender) = {
             let mut debug_flags = webrender::DebugFlags::empty();
@@ -320,11 +320,22 @@ where
             );
 
             let render_notifier = Box::new(RenderNotifier::new(compositor_proxy.clone()));
-            webrender::Renderer::new(
+            let clear_color = servo_config::pref!(shell.background_color.rgba);
+            let clear_color = ColorF::new(
+                clear_color[0] as f32,
+                clear_color[1] as f32,
+                clear_color[2] as f32,
+                clear_color[3] as f32,
+            );
+            webrender::create_webrender_instance(
                 webrender_gl.clone(),
                 render_notifier,
-                webrender::RendererOptions {
-                    device_pixel_ratio,
+                webrender::WebRenderOptions {
+                    // We force the use of optimized shaders here because rendering is broken
+                    // on Android emulators with unoptimized shaders. This is due to a known
+                    // issue in the emulator's OpenGL emulation layer.
+                    // See: https://github.com/servo/servo/issues/31726
+                    use_optimized_shaders: true,
                     resource_override_path: opts.shaders_dir.clone(),
                     enable_aa: !opts.debug.disable_text_antialiasing,
                     debug_flags: debug_flags,
@@ -336,7 +347,7 @@ where
                     enable_subpixel_aa: pref!(gfx.subpixel_text_antialiasing.enabled) &&
                         !opts.debug.disable_subpixel_text_antialiasing,
                     allow_texture_swizzling: pref!(gfx.texture_swizzling.enabled),
-                    clear_color: None,
+                    clear_color,
                     ..Default::default()
                 },
                 None,
@@ -345,7 +356,7 @@ where
         };
 
         let webrender_api = webrender_api_sender.create_api();
-        let webrender_document = webrender_api.add_document(coordinates.get_viewport().size);
+        let webrender_document = webrender_api.add_document(coordinates.get_viewport().size());
 
         // Important that this call is done in a single-threaded fashion, we
         // can't defer it after `create_constellation` has started.
@@ -387,7 +398,7 @@ where
             embedder.register_webxr(&mut webxr_main_thread, embedder_proxy.clone());
         }
 
-        let wgpu_image_handler = webgpu::WGPUExternalImages::new();
+        let wgpu_image_handler = webgpu::WGPUExternalImages::default();
         let wgpu_image_map = wgpu_image_handler.images.clone();
         external_image_handlers.set_handler(
             Box::new(wgpu_image_handler),
@@ -460,7 +471,6 @@ where
                 webxr_main_thread,
             },
             composite_target,
-            opts.is_running_problem_test,
             opts.exit_after_load,
             opts.debug.convert_mouse_to_touch,
             top_level_browsing_context_id,
@@ -846,7 +856,7 @@ where
     }
 
     pub fn pinch_zoom_level(&self) -> f32 {
-        self.compositor.pinch_zoom_level()
+        self.compositor.pinch_zoom_level().get()
     }
 
     pub fn setup_logging(&self) {
@@ -992,7 +1002,6 @@ fn create_constellation(
         initial_window_size,
         opts.random_pipeline_closure_probability,
         opts.random_pipeline_closure_seed,
-        opts.is_running_problem_test,
         opts.hard_fail,
         !opts.debug.disable_canvas_antialiasing,
         canvas_create_sender,

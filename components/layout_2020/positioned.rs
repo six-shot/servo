@@ -124,7 +124,7 @@ impl PositioningContext {
         }
     }
 
-    /// Create a [PositioninContext] to use for laying out a subtree. The idea is that
+    /// Create a [PositioningContext] to use for laying out a subtree. The idea is that
     /// when subtree layout is finished, the newly hoisted boxes can be processed
     /// (normally adjusting their static insets) and then appended to the parent
     /// [PositioningContext].
@@ -182,7 +182,7 @@ impl PositioningContext {
         self.adjust_static_position_of_hoisted_fragments_with_offset(start_offset, index);
     }
 
-    /// See documentation for [adjust_static_position_of_hoisted_fragments].
+    /// See documentation for [PositioningContext::adjust_static_position_of_hoisted_fragments].
     pub(crate) fn adjust_static_position_of_hoisted_fragments_with_offset(
         &mut self,
         start_offset: &LogicalVec2<CSSPixelLength>,
@@ -250,13 +250,13 @@ impl PositioningContext {
         new_fragment: &mut BoxFragment,
     ) {
         let padding_rect = LogicalRect {
-            size: new_fragment.content_rect.size.clone(),
+            size: new_fragment.content_rect.size,
             // Ignore the content rect’s position in its own containing block:
             start_corner: LogicalVec2::zero(),
         }
         .inflate(&new_fragment.padding);
         let containing_block = DefiniteContainingBlock {
-            size: padding_rect.size.clone().into(),
+            size: padding_rect.size.into(),
             style: &new_fragment.style,
         };
 
@@ -388,7 +388,7 @@ impl PositioningContext {
 
     /// Truncate this [PositioningContext] to the given [PositioningContextLength].  This
     /// is useful for "unhoisting" boxes in this context and returning it to the state at
-    /// the time that [`len()`] was called.
+    /// the time that [`PositioningContext::len()`] was called.
     pub(crate) fn truncate(&mut self, length: &PositioningContextLength) {
         if let Some(vec) = self.for_nearest_positioned_ancestor.as_mut() {
             vec.truncate(length.for_nearest_positioned_ancestor);
@@ -504,8 +504,8 @@ impl HoistedAbsolutelyPositionedBox {
         let inline_axis_solver = AbsoluteAxisSolver {
             containing_size: cbis,
             padding_border_sum: pbm.padding_border_sums.inline,
-            computed_margin_start: pbm.margin.inline_start.map(|t| t.into()),
-            computed_margin_end: pbm.margin.inline_end.map(|t| t.into()),
+            computed_margin_start: pbm.margin.inline_start,
+            computed_margin_end: pbm.margin.inline_end,
             avoid_negative_margin_start: true,
             box_offsets: &shared_fragment.box_offsets.inline,
         };
@@ -513,8 +513,8 @@ impl HoistedAbsolutelyPositionedBox {
         let block_axis_solver = AbsoluteAxisSolver {
             containing_size: cbbs,
             padding_border_sum: pbm.padding_border_sums.block,
-            computed_margin_start: pbm.margin.block_start.map(|t| t.into()),
-            computed_margin_end: pbm.margin.block_end.map(|t| t.into()),
+            computed_margin_start: pbm.margin.block_start,
+            computed_margin_end: pbm.margin.block_end,
             avoid_negative_margin_start: false,
             box_offsets: &shared_fragment.box_offsets.block,
         };
@@ -539,9 +539,7 @@ impl HoistedAbsolutelyPositionedBox {
                     // https://drafts.csswg.org/css2/visudet.html#abs-replaced-height
                     let style = &replaced.style;
                     content_size = computed_size.auto_is(|| unreachable!()).into();
-                    fragments = replaced
-                        .contents
-                        .make_fragments(style, content_size.clone());
+                    fragments = replaced.contents.make_fragments(style, content_size);
                 },
                 IndependentFormattingContext::NonReplaced(non_replaced) => {
                     // https://drafts.csswg.org/css2/#min-max-widths
