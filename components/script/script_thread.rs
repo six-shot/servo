@@ -3273,7 +3273,7 @@ impl ScriptThread {
             time_profiler_chan: self.time_profiler_chan.clone(),
             webrender_api_sender: self.webrender_api_sender.clone(),
             paint_time_metrics,
-            window_size: incomplete.window_size.clone(),
+            window_size: incomplete.window_size,
         };
         self.layouts.borrow_mut().insert(
             incomplete.pipeline_id,
@@ -3811,11 +3811,11 @@ impl ScriptThread {
         // http://dev.w3.org/csswg/cssom-view/#resizing-viewports
         if size_type == WindowSizeType::Resize {
             let uievent = UIEvent::new(
-                &window,
+                window,
                 DOMString::from("resize"),
                 EventBubbles::DoesNotBubble,
                 EventCancelable::NotCancelable,
-                Some(&window),
+                Some(window),
                 0i32,
             );
             uievent.upcast::<Event>().fire(window.upcast());
@@ -4003,13 +4003,13 @@ impl ScriptThread {
         let window = self.documents.borrow().find_window(pipeline_id);
         if let Some(window) = window {
             let entry = PerformancePaintTiming::new(
-                &window.upcast::<GlobalScope>(),
+                window.upcast::<GlobalScope>(),
                 metric_type,
                 metric_value,
             );
             window
                 .Performance()
-                .queue_entry(&entry.upcast::<PerformanceEntry>());
+                .queue_entry(entry.upcast::<PerformanceEntry>());
         }
     }
 
