@@ -1185,7 +1185,7 @@ impl ScriptThread {
                         is_headless: script_thread.headless,
                         user_agent: script_thread.user_agent.clone(),
                         gpu_id_hub: script_thread.gpu_id_hub.clone(),
-                        inherited_secure_context: script_thread.inherited_secure_context.clone(),
+                        inherited_secure_context: script_thread.inherited_secure_context,
                     };
                     Rc::new(WorkletThreadPool::spawn(init))
                 })
@@ -1335,7 +1335,7 @@ impl ScriptThread {
         };
 
         let background_hang_monitor = state.background_hang_monitor_register.register_component(
-            MonitoredComponentId(state.id.clone(), MonitoredComponentType::Script),
+            MonitoredComponentId(state.id, MonitoredComponentType::Script),
             Duration::from_millis(1000),
             Duration::from_millis(5000),
             Some(Box::new(background_hang_monitor_exit_signal)),
@@ -2183,28 +2183,28 @@ impl ScriptThread {
         match msg {
             DevtoolScriptControlMsg::EvaluateJS(id, s, reply) => match documents.find_window(id) {
                 Some(window) => devtools::handle_evaluate_js(window.upcast(), s, reply),
-                None => return warn!("Message sent to closed pipeline {}.", id),
+                None => warn!("Message sent to closed pipeline {}.", id),
             },
             DevtoolScriptControlMsg::GetRootNode(id, reply) => {
                 devtools::handle_get_root_node(&*documents, id, reply)
             },
             DevtoolScriptControlMsg::GetDocumentElement(id, reply) => {
-                devtools::handle_get_document_element(&*documents, id, reply)
+                devtools::handle_get_document_element(&documents, id, reply)
             },
             DevtoolScriptControlMsg::GetChildren(id, node_id, reply) => {
-                devtools::handle_get_children(&*documents, id, node_id, reply)
+                devtools::handle_get_children(&documents, id, node_id, reply)
             },
             DevtoolScriptControlMsg::GetLayout(id, node_id, reply) => {
-                devtools::handle_get_layout(&*documents, id, node_id, reply)
+                devtools::handle_get_layout(&documents, id, node_id, reply)
             },
             DevtoolScriptControlMsg::ModifyAttribute(id, node_id, modifications) => {
-                devtools::handle_modify_attribute(&*documents, id, node_id, modifications)
+                devtools::handle_modify_attribute(&documents, id, node_id, modifications)
             },
             DevtoolScriptControlMsg::WantsLiveNotifications(id, to_send) => match documents
                 .find_window(id)
             {
                 Some(window) => devtools::handle_wants_live_notifications(window.upcast(), to_send),
-                None => return warn!("Message sent to closed pipeline {}.", id),
+                None => warn!("Message sent to closed pipeline {}.", id),
             },
             DevtoolScriptControlMsg::SetTimelineMarkers(id, marker_types, reply) => {
                 devtools::handle_set_timeline_markers(&*documents, id, marker_types, reply)
