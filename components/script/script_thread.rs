@@ -3747,7 +3747,7 @@ impl ScriptThread {
         global_scope.evaluate_js_on_global_with_result(
             &script_source,
             jsval.handle_mut(),
-            ScriptFetchOptions::default_classic_script(&global_scope),
+            ScriptFetchOptions::default_classic_script(global_scope),
             global_scope.api_base_url(),
         );
 
@@ -3799,11 +3799,11 @@ impl ScriptThread {
         // http://dev.w3.org/csswg/cssom-view/#resizing-viewports
         if size_type == WindowSizeType::Resize {
             let uievent = UIEvent::new(
-                &window,
+                window,
                 DOMString::from("resize"),
                 EventBubbles::DoesNotBubble,
                 EventCancelable::NotCancelable,
-                Some(&window),
+                Some(window),
                 0i32,
             );
             uievent.upcast::<Event>().fire(window.upcast());
@@ -3991,13 +3991,13 @@ impl ScriptThread {
         let window = self.documents.borrow().find_window(pipeline_id);
         if let Some(window) = window {
             let entry = PerformancePaintTiming::new(
-                &window.upcast::<GlobalScope>(),
+                window.upcast::<GlobalScope>(),
                 metric_type,
                 metric_value,
             );
             window
                 .Performance()
-                .queue_entry(&entry.upcast::<PerformanceEntry>());
+                .queue_entry(entry.upcast::<PerformanceEntry>());
         }
     }
 
