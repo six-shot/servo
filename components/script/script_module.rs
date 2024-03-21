@@ -106,7 +106,7 @@ impl RethrowError {
 impl Clone for RethrowError {
     fn clone(&self) -> Self {
         Self(RootedTraceableBox::from_box(Heap::boxed(
-            self.0.get().clone(),
+            self.0.get(),
         )))
     }
 }
@@ -212,7 +212,7 @@ impl ModuleTree {
     }
 
     pub fn get_status(&self) -> ModuleStatus {
-        self.status.borrow().clone()
+        *self.status.borrow()
     }
 
     pub fn set_status(&self, status: ModuleStatus) {
@@ -356,7 +356,7 @@ impl ModuleTree {
 
         let realm = enter_realm(&*owner.global());
         let comp = InRealm::Entered(&realm);
-        let _ais = AutoIncumbentScript::new(&*owner.global());
+        let _ais = AutoIncumbentScript::new(&owner.global());
 
         let mut promise = self.promise.borrow_mut();
         match promise.as_ref() {
@@ -617,7 +617,7 @@ impl ModuleTree {
         }
 
         // Step 2.
-        if !specifier_str.starts_with("/") &&
+        if !specifier_str.starts_with('/') &&
             !specifier_str.starts_with("./") &&
             !specifier_str.starts_with("../")
         {
@@ -723,7 +723,7 @@ impl ModuleTree {
 
         match specifier_urls {
             // Step 3.
-            Ok(valid_specifier_urls) if valid_specifier_urls.len() == 0 => {
+            Ok(valid_specifier_urls) if valid_specifier_urls.is_empty() => {
                 debug!("Module {} doesn't have any dependencies.", self.url.clone());
                 self.advance_finished_and_link(&global);
             },
@@ -748,7 +748,7 @@ impl ModuleTree {
                 }
 
                 // Step 3.
-                if urls.len() == 0 {
+                if urls.is_empty() {
                     debug!(
                         "After checking with visited urls, module {} doesn't have dependencies to load.",
                         self.url.clone()
@@ -771,7 +771,7 @@ impl ModuleTree {
                         owner.clone(),
                         url.clone(),
                         visited_urls.clone(),
-                        destination.clone(),
+                        destination,
                         options,
                         Some(parent_identity.clone()),
                         false,
@@ -932,9 +932,9 @@ impl ModuleOwner {
                     .has_attribute(&local_name!("async"));
 
                 if !asynch && (*script.root()).get_parser_inserted() {
-                    document.deferred_script_loaded(&*script.root(), load);
+                    document.deferred_script_loaded(&script.root(), load);
                 } else if !asynch && !(*script.root()).get_non_blocking() {
-                    document.asap_in_order_script_loaded(&*script.root(), load);
+                    document.asap_in_order_script_loaded(&script.root(), load);
                 } else {
                     document.asap_script_loaded(&*script.root(), load);
                 };
@@ -1112,7 +1112,7 @@ impl FetchResponseListener for ModuleContext {
                 } else {
                     return Err(NetworkError::Internal(format!(
                         "Failed to parse MIME type: {}",
-                        content_type.to_string()
+                        content_type
                     )));
                 }
             } else {
@@ -1164,7 +1164,7 @@ impl FetchResponseListener for ModuleContext {
 
                         module_tree.fetch_module_descendants(
                             &self.owner,
-                            self.destination.clone(),
+                            self.destination,
                             &self.options,
                             ModuleIdentity::ModuleUrl(self.url.clone()),
                         );
@@ -1355,7 +1355,7 @@ fn fetch_an_import_module_script_graph(
         _ => ModuleOwner::DynamicModule(Trusted::new(&DynamicModuleOwner::new(
             global,
             promise.clone(),
-            dynamic_module_id.clone(),
+            dynamic_module_id,
         ))),
     };
 
@@ -1648,7 +1648,7 @@ fn fetch_single_module_script(
 
     // Step 7-8.
     let request = RequestBuilder::new(url.clone(), global.get_referrer())
-        .destination(destination.clone())
+        .destination(destination)
         .origin(global.origin().immutable().clone())
         .parser_metadata(options.parser_metadata)
         .integrity_metadata(options.integrity_metadata.clone())
@@ -1660,7 +1660,7 @@ fn fetch_single_module_script(
         data: vec![],
         metadata: None,
         url: url.clone(),
-        destination: destination.clone(),
+        destination: destination,
         options,
         status: Ok(()),
         resource_timing: ResourceFetchTiming::new(ResourceTimingType::Resource),
