@@ -1723,7 +1723,7 @@ pub(crate) fn fetch_inline_module_script(
         Ok(record) => {
             module_tree.append_handler(
                 owner.clone(),
-                ModuleIdentity::ScriptId(script_id.clone()),
+                ModuleIdentity::ScriptId(script_id),
                 options.clone(),
             );
             module_tree.set_record(record);
@@ -1749,7 +1749,7 @@ pub(crate) fn fetch_inline_module_script(
         Err(exception) => {
             module_tree.set_rethrow_error(exception);
             module_tree.set_status(ModuleStatus::Finished);
-            global.set_inline_module_map(script_id.clone(), module_tree);
+            global.set_inline_module_map(script_id, module_tree);
             owner.notify_owner_to_finish(ModuleIdentity::ScriptId(script_id), options);
         },
     }
