@@ -105,9 +105,7 @@ impl RethrowError {
 
 impl Clone for RethrowError {
     fn clone(&self) -> Self {
-        Self(RootedTraceableBox::from_box(Heap::boxed(
-            self.0.get(),
-        )))
+        Self(RootedTraceableBox::from_box(Heap::boxed(self.0.get())))
     }
 }
 
