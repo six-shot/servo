@@ -703,7 +703,7 @@ pub fn get_reports(cx: *mut RawJSContext, path_seg: String) -> Vec<Report> {
                 reports.push(Report {
                     path: path,
                     kind: kind,
-                    size: size as usize,
+                    size,
                 })
             };
 

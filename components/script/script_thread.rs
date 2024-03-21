@@ -3115,7 +3115,7 @@ impl ScriptThread {
             )
         });
 
-        let opener_browsing_context = opener.and_then(|id| ScriptThread::find_window_proxy(id));
+        let opener_browsing_context = opener.and_then(ScriptThread::find_window_proxy);
 
         let creator = CreatorBrowsingContextInfo::from(
             parent_browsing_context.as_deref(),
@@ -3171,7 +3171,7 @@ impl ScriptThread {
             _ => None,
         };
 
-        let opener_browsing_context = opener.and_then(|id| ScriptThread::find_window_proxy(id));
+        let opener_browsing_context = opener.and_then(ScriptThread::find_window_proxy);
 
         let creator = CreatorBrowsingContextInfo::from(
             parent_browsing_context.as_deref(),
@@ -3467,7 +3467,7 @@ impl ScriptThread {
 
     /// Reflows non-incrementally, rebuilding the entire layout tree in the process.
     fn rebuild_and_force_reflow(&self, document: &Document, reason: ReflowReason) {
-        let window = window_from_node(&*document);
+        let window = window_from_node(document);
         document.dirty_all_nodes();
         window.reflow(ReflowGoal::Full, reason);
     }
@@ -3817,7 +3817,7 @@ impl ScriptThread {
     /// Instructs the constellation to fetch the document that will be loaded. Stores the InProgressLoad
     /// argument until a notification is received that the fetch is complete.
     fn pre_page_load(&self, mut incomplete: InProgressLoad, load_data: LoadData) {
-        let id = incomplete.pipeline_id.clone();
+        let id = incomplete.pipeline_id;
         let req_init = RequestBuilder::new(load_data.url.clone(), load_data.referrer)
             .method(load_data.method)
             .destination(Destination::Document)

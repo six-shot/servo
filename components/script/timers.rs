@@ -194,7 +194,7 @@ impl OneshotTimers {
     fn is_next_timer(&self, handle: OneshotTimerHandle) -> bool {
         match self.timers.borrow().last() {
             None => false,
-            Some(ref max_timer) => max_timer.handle == handle,
+            Some(max_timer) => max_timer.handle == handle,
         }
     }
 
