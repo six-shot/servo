@@ -354,7 +354,7 @@ impl ModuleTree {
 
         let realm = enter_realm(&*owner.global());
         let comp = InRealm::Entered(&realm);
-        let _ais = AutoIncumbentScript::new(&*owner.global());
+        let _ais = AutoIncumbentScript::new(&owner.global());
 
         let mut promise = self.promise.borrow_mut();
         match promise.as_ref() {
@@ -390,7 +390,7 @@ impl ModuleTree {
 
         let realm = enter_realm(&*owner.global());
         let comp = InRealm::Entered(&realm);
-        let _ais = AutoIncumbentScript::new(&*owner.global());
+        let _ais = AutoIncumbentScript::new(&owner.global());
 
         let mut promise = self.promise.borrow_mut();
         match promise.as_ref() {
@@ -543,7 +543,7 @@ impl ModuleTree {
 
         if let Some(exception) = &*module_error {
             unsafe {
-                let ar = enter_realm(&*global);
+                let ar = enter_realm(&global);
                 JS_SetPendingException(
                     *GlobalScope::get_cx(),
                     exception.handle(),
@@ -615,7 +615,7 @@ impl ModuleTree {
         }
 
         // Step 2.
-        if !specifier_str.starts_with("/") &&
+        if !specifier_str.starts_with('/') &&
             !specifier_str.starts_with("./") &&
             !specifier_str.starts_with("../")
         {
@@ -721,7 +721,7 @@ impl ModuleTree {
 
         match specifier_urls {
             // Step 3.
-            Ok(valid_specifier_urls) if valid_specifier_urls.len() == 0 => {
+            Ok(valid_specifier_urls) if valid_specifier_urls.is_empty() => {
                 debug!("Module {} doesn't have any dependencies.", self.url.clone());
                 self.advance_finished_and_link(&global);
             },
@@ -746,7 +746,7 @@ impl ModuleTree {
                 }
 
                 // Step 3.
-                if urls.len() == 0 {
+                if urls.is_empty() {
                     debug!(
                         "After checking with visited urls, module {} doesn't have dependencies to load.",
                         self.url.clone()
@@ -930,9 +930,9 @@ impl ModuleOwner {
                     .has_attribute(&local_name!("async"));
 
                 if !asynch && (*script.root()).get_parser_inserted() {
-                    document.deferred_script_loaded(&*script.root(), load);
+                    document.deferred_script_loaded(&script.root(), load);
                 } else if !asynch && !(*script.root()).get_non_blocking() {
-                    document.asap_in_order_script_loaded(&*script.root(), load);
+                    document.asap_in_order_script_loaded(&script.root(), load);
                 } else {
                     document.asap_script_loaded(&*script.root(), load);
                 };
@@ -1110,7 +1110,7 @@ impl FetchResponseListener for ModuleContext {
                 } else {
                     return Err(NetworkError::Internal(format!(
                         "Failed to parse MIME type: {}",
-                        content_type.to_string()
+                        content_type
                     )));
                 }
             } else {

@@ -429,7 +429,7 @@ impl XRSession {
         frame.set_animation_frame(true);
 
         // Step 10
-        self.apply_frame_updates(&*frame);
+        self.apply_frame_updates(&frame);
 
         // TODO: how does this fit with the webxr and xr layers specs?
         self.layers_begin_frame(&*frame);

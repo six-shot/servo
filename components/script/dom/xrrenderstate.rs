@@ -79,7 +79,7 @@ impl XRRenderState {
             self.depth_near.get(),
             self.depth_far.get(),
             self.inline_vertical_fov.get(),
-            self.base_layer.get().as_ref().map(|x| &**x),
+            self.base_layer.get().as_deref(),
             self.layers.borrow().iter().map(|x| &**x).collect(),
         )
     }
@@ -100,7 +100,7 @@ impl XRRenderState {
     pub fn set_layers(&self, layers: Vec<&XRLayer>) {
         *self.layers.borrow_mut() = layers
             .into_iter()
-            .map(|layer| Dom::from_ref(layer))
+            .map(Dom::from_ref)
             .collect();
     }
     pub fn with_layers<F, R>(&self, f: F) -> R
@@ -108,7 +108,7 @@ impl XRRenderState {
         F: FnOnce(&[Dom<XRLayer>]) -> R,
     {
         let layers = self.layers.borrow();
-        f(&*layers)
+        f(&layers)
     }
     pub fn has_sub_images(&self, sub_images: &[SubImages]) -> bool {
         if let Some(base_layer) = self.base_layer.get() {
