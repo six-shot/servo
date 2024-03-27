@@ -302,7 +302,7 @@ pub struct GlobalScope {
     ///
     /// <https://html.spec.whatwg.org/multipage/#outstanding-rejected-promises-weak-set>
     #[ignore_malloc_size_of = "mozjs"]
-    consumed_rejections: DomRefCell<Vec<Box<Heap<*mut JSObject>>>>,
+    consumed_rejections: DomRefCell<Vec<Heap<*mut JSObject>>>,
 
     /// True if headless mode.
     is_headless: bool,
