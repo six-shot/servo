@@ -98,6 +98,7 @@ impl GPUBuffer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         global: &GlobalScope,
         channel: WebGPU,
@@ -159,7 +160,7 @@ impl GPUBufferMethods for GPUBuffer {
                     WebGPURequest::UnmapBuffer {
                         buffer_id: self.id().0,
                         device_id: self.device.id().0,
-                        array_buffer: IpcSharedMemory::from_bytes(&*m_info.mapping.lock().unwrap()),
+                        array_buffer: IpcSharedMemory::from_bytes(&m_info.mapping.lock().unwrap()),
                         is_map_read: m_info.map_mode == Some(GPUMapModeConstants::READ),
                         offset: m_range.start,
                         size: m_range.end - m_range.start,
@@ -301,10 +302,11 @@ impl GPUBufferMethods for GPUBuffer {
         } else {
             return Err(Error::Operation);
         };
-        let mut valid = match self.state.get() {
-            GPUBufferState::Mapped | GPUBufferState::MappedAtCreation => true,
-            _ => false,
-        };
+        let mut valid = matches!(
+            self.state.get(),
+            GPUBufferState::Mapped | GPUBufferState::MappedAtCreation
+        );
+
         valid &= offset % RANGE_OFFSET_ALIGN_MASK == 0 &&
             range_size % RANGE_SIZE_ALIGN_MASK == 0 &&
             offset >= m_info.mapping_range.start &&

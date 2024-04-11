@@ -24,7 +24,7 @@ use script_traits::{
     ScriptToCompositorMsg,
 };
 use style_traits::CSSPixel;
-use webrender_api::units::{DeviceIntPoint, DeviceIntSize};
+use webrender_api::units::{DeviceIntPoint, DeviceIntSize, DeviceRect};
 use webrender_api::{self, FontInstanceKey, FontKey, ImageKey};
 
 /// Sends messages to the compositor.
@@ -73,16 +73,26 @@ pub enum CompositorMsg {
     ShutdownComplete,
     /// Alerts the compositor that the given pipeline has changed whether it is running animations.
     ChangeRunningAnimationsState(PipelineId, AnimationState),
-    /// Replaces the current frame tree, typically called during main frame navigation.
-    SetFrameTree(SendableFrameTree),
+    /// Create or update a webview, given its frame tree.
+    CreateOrUpdateWebView(SendableFrameTree),
+    /// Remove a webview.
+    RemoveWebView(TopLevelBrowsingContextId),
+    /// Move and/or resize a webview to the given rect.
+    MoveResizeWebView(TopLevelBrowsingContextId, DeviceRect),
+    /// Start painting a webview, and optionally stop painting all others.
+    ShowWebView(TopLevelBrowsingContextId, bool),
+    /// Stop painting a webview.
+    HideWebView(TopLevelBrowsingContextId),
+    /// Start painting a webview on top of all others, and optionally stop painting all others.
+    RaiseWebViewToTop(TopLevelBrowsingContextId, bool),
     /// Script has handled a touch event, and either prevented or allowed default actions.
     TouchEventProcessed(EventResult),
     /// Composite to a PNG file and return the Image over a passed channel.
     CreatePng(Option<Rect<f32, CSSPixel>>, IpcSender<Option<Image>>),
     /// A reply to the compositor asking if the output image is stable.
     IsReadyToSaveImageReply(bool),
-    /// Pipeline visibility changed
-    PipelineVisibilityChanged(PipelineId, bool),
+    /// Set whether to use less resources by stopping animations.
+    SetThrottled(PipelineId, bool),
     /// WebRender has produced a new frame. This message informs the compositor that
     /// the frame is ready, so that it may trigger a recomposite.
     NewWebRenderFrameReady(bool /* composite_needed */),
@@ -92,10 +102,6 @@ pub enum CompositorMsg {
     // sends a reply on the IpcSender, the constellation knows it's safe to
     // tear down the other threads associated with this pipeline.
     PipelineExited(PipelineId, IpcSender<()>),
-    /// Runs a closure in the compositor thread.
-    /// It's used to dispatch functions from webrender to the main thread's event loop.
-    /// Required to allow WGL GLContext sharing in Windows.
-    Dispatch(Box<dyn Fn() + Send>),
     /// Indicates to the compositor that it needs to record the time when the frame with
     /// the given ID (epoch) is painted and report it to the layout of the given
     /// pipeline ID.
@@ -157,14 +163,18 @@ impl Debug for CompositorMsg {
             CompositorMsg::ChangeRunningAnimationsState(_, state) => {
                 write!(f, "ChangeRunningAnimationsState({:?})", state)
             },
-            CompositorMsg::SetFrameTree(..) => write!(f, "SetFrameTree"),
+            CompositorMsg::CreateOrUpdateWebView(..) => write!(f, "CreateOrUpdateWebView"),
+            CompositorMsg::RemoveWebView(..) => write!(f, "RemoveWebView"),
+            CompositorMsg::MoveResizeWebView(..) => write!(f, "MoveResizeWebView"),
+            CompositorMsg::ShowWebView(..) => write!(f, "ShowWebView"),
+            CompositorMsg::HideWebView(..) => write!(f, "HideWebView"),
+            CompositorMsg::RaiseWebViewToTop(..) => write!(f, "RaiseWebViewToTop"),
             CompositorMsg::TouchEventProcessed(..) => write!(f, "TouchEventProcessed"),
             CompositorMsg::CreatePng(..) => write!(f, "CreatePng"),
             CompositorMsg::IsReadyToSaveImageReply(..) => write!(f, "IsReadyToSaveImageReply"),
-            CompositorMsg::PipelineVisibilityChanged(..) => write!(f, "PipelineVisibilityChanged"),
+            CompositorMsg::SetThrottled(..) => write!(f, "SetThrottled"),
             CompositorMsg::PipelineExited(..) => write!(f, "PipelineExited"),
             CompositorMsg::NewWebRenderFrameReady(..) => write!(f, "NewWebRenderFrameReady"),
-            CompositorMsg::Dispatch(..) => write!(f, "Dispatch"),
             CompositorMsg::PendingPaintMetric(..) => write!(f, "PendingPaintMetric"),
             CompositorMsg::LoadComplete(..) => write!(f, "LoadComplete"),
             CompositorMsg::WebDriverMouseButtonEvent(..) => write!(f, "WebDriverMouseButtonEvent"),

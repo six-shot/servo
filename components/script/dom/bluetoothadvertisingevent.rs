@@ -43,13 +43,14 @@ impl BluetoothAdvertisingEvent {
         BluetoothAdvertisingEvent {
             event: Event::new_inherited(),
             device: Dom::from_ref(device),
-            name: name,
-            appearance: appearance,
-            tx_power: tx_power,
-            rssi: rssi,
+            name,
+            appearance,
+            tx_power,
+            rssi,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         global: &GlobalScope,
         proto: Option<HandleObject>,
@@ -85,9 +86,9 @@ impl BluetoothAdvertisingEvent {
     ) -> Fallible<DomRoot<BluetoothAdvertisingEvent>> {
         let global = window.upcast::<GlobalScope>();
         let name = init.name.clone();
-        let appearance = init.appearance.clone();
-        let txPower = init.txPower.clone();
-        let rssi = init.rssi.clone();
+        let appearance = init.appearance;
+        let txPower = init.txPower;
+        let rssi = init.rssi;
         let bubbles = EventBubbles::from(init.parent.bubbles);
         let cancelable = EventCancelable::from(init.parent.cancelable);
         Ok(BluetoothAdvertisingEvent::new(

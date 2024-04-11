@@ -49,13 +49,13 @@ impl CryptoMethods for Crypto {
         let array_type = input.get_array_type();
 
         if !is_integer_buffer(array_type) {
-            return Err(Error::TypeMismatch);
+            Err(Error::TypeMismatch)
         } else {
-            let mut data = unsafe { input.as_mut_slice() };
+            let data = unsafe { input.as_mut_slice() };
             if data.len() > 65536 {
                 return Err(Error::QuotaExceeded);
             }
-            self.rng.borrow_mut().fill_bytes(&mut data);
+            self.rng.borrow_mut().fill_bytes(data);
             let underlying_object = unsafe { input.underlying_object() };
             TypedArray::<ArrayBufferViewU8, *mut JSObject>::from(*underlying_object)
                 .map_err(|_| Error::JSFailed)
@@ -64,14 +64,14 @@ impl CryptoMethods for Crypto {
 }
 
 fn is_integer_buffer(array_type: Type) -> bool {
-    match array_type {
+    matches!(
+        array_type,
         Type::Uint8 |
-        Type::Uint8Clamped |
-        Type::Int8 |
-        Type::Uint16 |
-        Type::Int16 |
-        Type::Uint32 |
-        Type::Int32 => true,
-        _ => false,
-    }
+            Type::Uint8Clamped |
+            Type::Int8 |
+            Type::Uint16 |
+            Type::Int16 |
+            Type::Uint32 |
+            Type::Int32
+    )
 }

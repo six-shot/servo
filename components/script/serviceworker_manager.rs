@@ -234,7 +234,7 @@ impl ServiceWorkerManager {
 
         ServiceWorkerManager {
             registrations: HashMap::new(),
-            own_sender: own_sender,
+            own_sender,
             own_port: from_constellation_receiver,
             resource_receiver: resource_port,
             _constellation_sender: constellation_sender,
@@ -243,7 +243,7 @@ impl ServiceWorkerManager {
 
     pub fn get_matching_scope(&self, load_url: &ServoUrl) -> Option<ServoUrl> {
         for scope in self.registrations.keys() {
-            if longest_prefix_match(&scope, load_url) {
+            if longest_prefix_match(scope, load_url) {
                 return Some(scope.clone());
             }
         }
@@ -364,7 +364,6 @@ impl ServiceWorkerManager {
                         active_worker: registration.active_worker.as_ref().map(|worker| worker.id),
                     },
                 ));
-                return;
             }
         } else {
             // Step 6: we do not have a registration.
@@ -498,17 +497,18 @@ impl ServiceWorkerManagerFactory for ServiceWorkerManager {
         let from_constellation = ROUTER.route_ipc_receiver_to_new_crossbeam_receiver(receiver);
         let resource_port = ROUTER.route_ipc_receiver_to_new_crossbeam_receiver(resource_port);
         let _ = resource_sender.send(CoreResourceMsg::NetworkMediator(resource_chan, origin));
+        let swmanager_thread = move || {
+            ServiceWorkerManager::new(
+                own_sender,
+                from_constellation,
+                resource_port,
+                constellation_sender,
+            )
+            .handle_message()
+        };
         if thread::Builder::new()
             .name("SvcWorkerManager".to_owned())
-            .spawn(move || {
-                ServiceWorkerManager::new(
-                    own_sender,
-                    from_constellation,
-                    resource_port,
-                    constellation_sender,
-                )
-                .handle_message();
-            })
+            .spawn(swmanager_thread)
             .is_err()
         {
             warn!("ServiceWorkerManager thread spawning failed");

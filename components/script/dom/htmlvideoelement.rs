@@ -148,7 +148,7 @@ impl HTMLVideoElement {
         }
 
         // Step 3.
-        let poster_url = match document_from_node(self).url().join(&poster_url) {
+        let poster_url = match document_from_node(self).url().join(poster_url) {
             Ok(url) => url,
             Err(_) => return,
         };
@@ -205,7 +205,7 @@ impl HTMLVideoElement {
         // (which triggers no media load algorithm unless a explicit call to .load() is done)
         // will block the document's load event forever.
         let mut blocker = self.load_blocker.borrow_mut();
-        LoadBlocker::terminate(&mut *blocker);
+        LoadBlocker::terminate(&mut blocker);
         *blocker = Some(LoadBlocker::new(
             &document_from_node(self),
             LoadType::Image(poster_url.clone()),
@@ -279,12 +279,9 @@ impl VirtualMethods for HTMLVideoElement {
         self.super_type().unwrap().attribute_mutated(attr, mutation);
 
         if let Some(new_value) = mutation.new_value(attr) {
-            match attr.local_name() {
-                &local_name!("poster") => {
-                    self.fetch_poster_frame(&new_value);
-                },
-                _ => (),
-            };
+            if attr.local_name() == &local_name!("poster") {
+                self.fetch_poster_frame(&new_value);
+            }
         }
     }
 }
@@ -299,13 +296,13 @@ impl ImageCacheListener for HTMLVideoElement {
             ImageResponse::Loaded(image, url) => {
                 debug!("Loaded poster image for video element: {:?}", url);
                 self.htmlmediaelement.process_poster_image_loaded(image);
-                LoadBlocker::terminate(&mut *self.load_blocker.borrow_mut());
+                LoadBlocker::terminate(&mut self.load_blocker.borrow_mut());
             },
             ImageResponse::MetadataLoaded(..) => {},
             // The image cache may have loaded a placeholder for an invalid poster url
             ImageResponse::PlaceholderLoaded(..) | ImageResponse::None => {
                 // A failed load should unblock the document load.
-                LoadBlocker::terminate(&mut *self.load_blocker.borrow_mut());
+                LoadBlocker::terminate(&mut self.load_blocker.borrow_mut());
             },
         }
     }

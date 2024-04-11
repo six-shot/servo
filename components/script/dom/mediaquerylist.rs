@@ -40,7 +40,7 @@ impl MediaQueryList {
         MediaQueryList {
             eventtarget: EventTarget::new_inherited(),
             document: Dom::from_ref(document),
-            media_query_list: media_query_list,
+            media_query_list,
             last_match_state: Cell::new(None),
         }
     }
@@ -72,8 +72,9 @@ impl MediaQueryList {
     }
 
     pub fn evaluate(&self) -> bool {
-        self.media_query_list
-            .evaluate(&self.document.device(), self.document.quirks_mode())
+        let quirks_mode = self.document.quirks_mode();
+        self.document
+            .with_device(move |device| self.media_query_list.evaluate(device, quirks_mode))
     }
 }
 

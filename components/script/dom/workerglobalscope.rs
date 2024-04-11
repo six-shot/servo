@@ -129,6 +129,7 @@ pub struct WorkerGlobalScope {
 }
 
 impl WorkerGlobalScope {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_inherited(
         init: WorkerGlobalScopeInit,
         worker_name: DOMString,
@@ -220,7 +221,7 @@ impl WorkerGlobalScope {
     }
 
     pub fn get_worker_id(&self) -> WorkerId {
-        self.worker_id.clone()
+        self.worker_id
     }
 
     pub fn task_canceller(&self) -> TaskCanceller {
@@ -275,7 +276,7 @@ impl WorkerGlobalScopeMethods for WorkerGlobalScope {
             let (url, source) = match fetch::load_whole_resource(
                 request,
                 &global_scope.resource_threads().sender(),
-                &global_scope,
+                global_scope,
             ) {
                 Err(_) => return Err(Error::Network),
                 Ok((metadata, bytes)) => (metadata.final_url, String::from_utf8(bytes).unwrap()),
@@ -455,7 +456,7 @@ impl WorkerGlobalScope {
                     // https://github.com/servo/servo/issues/6422
                     println!("evaluate_script failed");
                     unsafe {
-                        let ar = enter_realm(&*self);
+                        let ar = enter_realm(self);
                         report_pending_exception(cx, true, InRealm::Entered(&ar));
                     }
                 }
@@ -467,7 +468,7 @@ impl WorkerGlobalScope {
         let dedicated = self.downcast::<DedicatedWorkerGlobalScope>();
         let service_worker = self.downcast::<ServiceWorkerGlobalScope>();
         if let Some(dedicated) = dedicated {
-            return dedicated.script_chan();
+            dedicated.script_chan()
         } else if let Some(service_worker) = service_worker {
             return service_worker.script_chan();
         } else {
@@ -510,7 +511,7 @@ impl WorkerGlobalScope {
     pub fn new_script_pair(&self) -> (Box<dyn ScriptChan + Send>, Box<dyn ScriptPort + Send>) {
         let dedicated = self.downcast::<DedicatedWorkerGlobalScope>();
         if let Some(dedicated) = dedicated {
-            return dedicated.new_script_pair();
+            dedicated.new_script_pair()
         } else {
             panic!("need to implement a sender for SharedWorker/ServiceWorker")
         }
@@ -519,6 +520,7 @@ impl WorkerGlobalScope {
     /// Process a single event as if it were the next event
     /// in the queue for this worker event-loop.
     /// Returns a boolean indicating whether further events should be processed.
+    #[allow(unsafe_code)]
     pub fn process_event(&self, msg: CommonScriptMsg) -> bool {
         if self.is_closing() {
             return false;
@@ -528,7 +530,7 @@ impl WorkerGlobalScope {
             CommonScriptMsg::CollectReports(reports_chan) => {
                 let cx = self.get_cx();
                 let path_seg = format!("url({})", self.get_url());
-                let reports = get_reports(*cx, path_seg);
+                let reports = unsafe { get_reports(*cx, path_seg) };
                 reports_chan.send(reports);
             },
         }

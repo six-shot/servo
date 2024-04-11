@@ -435,7 +435,7 @@ impl ServoGlue {
     pub fn resize(&mut self, coordinates: Coordinates) -> Result<(), &'static str> {
         info!("resize");
         *self.callbacks.coordinates.borrow_mut() = coordinates;
-        self.process_event(EmbedderEvent::Resize)
+        self.process_event(EmbedderEvent::WindowResize)
     }
 
     /// Start scrolling.
@@ -601,10 +601,10 @@ impl ServoGlue {
         self.process_event(EmbedderEvent::MediaSessionAction(action))
     }
 
-    pub fn change_visibility(&mut self, visible: bool) -> Result<(), &'static str> {
-        info!("change_visibility");
+    pub fn set_throttled(&mut self, throttled: bool) -> Result<(), &'static str> {
+        info!("set_throttled");
         if let Ok(id) = self.get_browser_id() {
-            let event = EmbedderEvent::WebViewVisibilityChanged(id, visible);
+            let event = EmbedderEvent::SetWebViewThrottled(id, throttled);
             self.process_event(event)
         } else {
             // Ignore visibility change if no browser has been created yet.
@@ -818,7 +818,7 @@ impl ServoGlue {
                 EmbedderMsg::Panic(reason, backtrace) => {
                     self.callbacks.host_callbacks.on_panic(reason, backtrace);
                 },
-                EmbedderMsg::ReadyToPresent => {
+                EmbedderMsg::ReadyToPresent(_webview_ids) => {
                     need_present = true;
                 },
                 EmbedderMsg::Status(..) |

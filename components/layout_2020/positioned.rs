@@ -18,7 +18,8 @@ use crate::dom::NodeExt;
 use crate::dom_traversal::{Contents, NodeAndStyleInfo};
 use crate::formatting_contexts::IndependentFormattingContext;
 use crate::fragment_tree::{
-    AbsoluteBoxOffsets, BoxFragment, CollapsedBlockMargins, Fragment, HoistedSharedFragment,
+    AbsoluteBoxOffsets, BoxFragment, CollapsedBlockMargins, Fragment, FragmentFlags,
+    HoistedSharedFragment,
 };
 use crate::geom::{
     AuOrAuto, LengthOrAuto, LengthPercentageOrAuto, LogicalRect, LogicalSides, LogicalVec2,
@@ -144,9 +145,13 @@ impl PositioningContext {
     }
 
     pub(crate) fn new_for_style(style: &ComputedValues) -> Option<Self> {
-        if style.establishes_containing_block_for_all_descendants() {
+        // NB: We never make PositioningContexts for replaced elements, which is why we always
+        // pass false here.
+        if style.establishes_containing_block_for_all_descendants(FragmentFlags::empty()) {
             Some(Self::new_for_containing_block_for_all_descendants())
-        } else if style.establishes_containing_block_for_absolute_descendants() {
+        } else if style
+            .establishes_containing_block_for_absolute_descendants(FragmentFlags::empty())
+        {
             Some(Self {
                 for_nearest_positioned_ancestor: Some(Vec::new()),
                 for_nearest_containing_block_for_all_descendants: Vec::new(),
@@ -254,7 +259,7 @@ impl PositioningContext {
             // Ignore the content rect’s position in its own containing block:
             start_corner: LogicalVec2::zero(),
         }
-        .inflate(&new_fragment.padding);
+        .inflate(&new_fragment.padding.map(|t| (*t).into()));
         let containing_block = DefiniteContainingBlock {
             size: padding_rect.size.into(),
             style: &new_fragment.style,
@@ -703,9 +708,9 @@ impl HoistedAbsolutelyPositionedBox {
                 absolutely_positioned_box.context.style().clone(),
                 fragments,
                 content_rect.into(),
-                pbm.padding.into(),
-                pbm.border.into(),
-                margin.into(),
+                pbm.padding,
+                pbm.border,
+                margin,
                 None, /* clearance */
                 // We do not set the baseline offset, because absolutely positioned
                 // elements are not inflow.

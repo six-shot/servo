@@ -65,6 +65,7 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         dom_manipulation_task_source: DOMManipulationTaskSource,
         file_reading_task_source: FileReadingTaskSource,
@@ -194,7 +195,7 @@ impl TaskManager {
 
     pub fn task_canceller(&self, name: TaskSourceName) -> TaskCanceller {
         let mut flags = self.task_cancellers.borrow_mut();
-        let cancel_flag = flags.entry(name).or_insert(Default::default());
+        let cancel_flag = flags.entry(name).or_default();
         TaskCanceller {
             cancelled: cancel_flag.clone(),
         }

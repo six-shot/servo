@@ -48,6 +48,7 @@ impl CompositionEvent {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new_with_proto(
         window: &Window,
         proto: Option<HandleObject>,
@@ -61,7 +62,7 @@ impl CompositionEvent {
         let ev = reflect_dom_object_with_proto(
             Box::new(CompositionEvent {
                 uievent: UIEvent::new_inherited(),
-                data: data,
+                data,
             }),
             window,
             proto,
@@ -92,7 +93,7 @@ impl CompositionEvent {
     }
 
     pub fn data(&self) -> &str {
-        &*self.data
+        &self.data
     }
 }
 

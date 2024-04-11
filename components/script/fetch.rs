@@ -288,10 +288,9 @@ impl FetchResponseListener for FetchContext {
 
     fn submit_resource_timing(&mut self) {
         // navigation submission is handled in servoparser/mod.rs
-        match self.resource_timing.timing_type {
-            ResourceTimingType::Resource => network_listener::submit_timing(self),
-            _ => {},
-        };
+        if self.resource_timing.timing_type == ResourceTimingType::Resource {
+            network_listener::submit_timing(self)
+        }
     }
 }
 
@@ -346,7 +345,7 @@ pub fn load_whole_resource(
             FetchResponseMsg::ProcessResponseEOF(Ok(_)) => {
                 let metadata = metadata.unwrap();
                 if let Some(timing) = &metadata.timing {
-                    submit_timing_data(global, url, InitiatorType::Other, &timing);
+                    submit_timing_data(global, url, InitiatorType::Other, timing);
                 }
                 return Ok((metadata, buf));
             },

@@ -429,10 +429,10 @@ impl XRSession {
         frame.set_animation_frame(true);
 
         // Step 10
-        self.apply_frame_updates(&*frame);
+        self.apply_frame_updates(&frame);
 
         // TODO: how does this fit with the webxr and xr layers specs?
-        self.layers_begin_frame(&*frame);
+        self.layers_begin_frame(&frame);
 
         // Step 11-12
         self.outside_raf.set(false);
@@ -441,7 +441,7 @@ impl XRSession {
             let callback = self.current_raf_callback_list.borrow()[i]
                 .1
                 .as_ref()
-                .map(|callback| Rc::clone(callback));
+                .map(Rc::clone);
             if let Some(callback) = callback {
                 let _ = callback.Call__(time, &frame, ExceptionHandling::Report);
             }
@@ -450,7 +450,7 @@ impl XRSession {
         *self.current_raf_callback_list.borrow_mut() = vec![];
 
         // TODO: how does this fit with the webxr and xr layers specs?
-        self.layers_end_frame(&*frame);
+        self.layers_end_frame(&frame);
 
         // Step 13
         frame.set_active(false);
@@ -542,7 +542,7 @@ impl XRSession {
         match event {
             FrameUpdateEvent::HitTestSourceAdded(id) => {
                 if let Some(promise) = self.pending_hit_test_promises.borrow_mut().remove(&id) {
-                    promise.resolve_native(&XRHitTestSource::new(&self.global(), id, &self));
+                    promise.resolve_native(&XRHitTestSource::new(&self.global(), id, self));
                 } else {
                     warn!(
                         "received hit test add request for unknown hit test {:?}",
@@ -779,13 +779,12 @@ impl XRSessionMethods for XRSession {
                     (!self.is_immersive() || ty != XRReferenceSpaceType::Local)
                 {
                     let s = ty.as_str();
-                    if self
+                    if !self
                         .session
                         .borrow()
                         .granted_features()
                         .iter()
-                        .find(|f| &**f == s)
-                        .is_none()
+                        .any(|f| *f == s)
                     {
                         p.reject_error(Error::NotSupported);
                         return p;
@@ -833,13 +832,12 @@ impl XRSessionMethods for XRSession {
     fn RequestHitTestSource(&self, options: &XRHitTestOptionsInit) -> Rc<Promise> {
         let p = Promise::new(&self.global());
 
-        if self
+        if !self
             .session
             .borrow()
             .granted_features()
             .iter()
-            .find(|f| &**f == "hit-test")
-            .is_none()
+            .any(|f| &*f == "hit-test")
         {
             p.reject_error(Error::NotSupported);
             return p;

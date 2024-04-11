@@ -54,8 +54,8 @@ impl ExtendableMessageEvent {
         ExtendableMessageEvent {
             event: ExtendableEvent::new_inherited(),
             data: Heap::default(),
-            origin: origin,
-            lastEventId: lastEventId,
+            origin,
+            lastEventId,
             ports: ports
                 .into_iter()
                 .map(|port| Dom::from_ref(&*port))
@@ -64,6 +64,7 @@ impl ExtendableMessageEvent {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         global: &GlobalScope,
         type_: Atom,
@@ -87,6 +88,7 @@ impl ExtendableMessageEvent {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new_with_proto(
         global: &GlobalScope,
         proto: Option<HandleObject>,

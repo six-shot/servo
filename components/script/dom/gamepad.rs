@@ -52,6 +52,7 @@ pub struct Gamepad {
 }
 
 impl Gamepad {
+    #[allow(clippy::too_many_arguments)]
     fn new_inherited(
         gamepad_id: u32,
         id: String,
@@ -67,18 +68,18 @@ impl Gamepad {
     ) -> Gamepad {
         Self {
             reflector_: Reflector::new(),
-            gamepad_id: gamepad_id,
-            id: id,
+            gamepad_id,
+            id,
             index: Cell::new(index),
             connected: Cell::new(connected),
             timestamp: Cell::new(timestamp),
-            mapping_type: mapping_type,
+            mapping_type,
             axes: HeapBufferSource::default(),
             buttons: Dom::from_ref(buttons),
             pose: pose.map(Dom::from_ref),
-            hand: hand,
-            axis_bounds: axis_bounds,
-            button_bounds: button_bounds,
+            hand,
+            axis_bounds,
+            button_bounds,
             exposed: Cell::new(false),
         }
     }
@@ -198,6 +199,10 @@ impl Gamepad {
         }
     }
 
+    pub fn index(&self) -> i32 {
+        self.index.get()
+    }
+
     pub fn update_index(&self, index: i32) {
         self.index.set(index);
     }
@@ -207,7 +212,7 @@ impl Gamepad {
     }
 
     pub fn notify_event(&self, event_type: GamepadEventType) {
-        let event = GamepadEvent::new_with_type(&self.global(), event_type, &self);
+        let event = GamepadEvent::new_with_type(&self.global(), event_type, self);
         event
             .upcast::<Event>()
             .fire(self.global().as_window().upcast::<EventTarget>());
@@ -286,11 +291,7 @@ impl Gamepad {
 /// <https://www.w3.org/TR/gamepad/#dfn-gamepad-user-gesture>
 pub fn contains_user_gesture(update_type: GamepadUpdateType) -> bool {
     match update_type {
-        GamepadUpdateType::Axis(_, value) => {
-            return value.abs() > AXIS_TILT_THRESHOLD;
-        },
-        GamepadUpdateType::Button(_, value) => {
-            return value > BUTTON_PRESS_THRESHOLD;
-        },
-    };
+        GamepadUpdateType::Axis(_, value) => value.abs() > AXIS_TILT_THRESHOLD,
+        GamepadUpdateType::Button(_, value) => value > BUTTON_PRESS_THRESHOLD,
+    }
 }

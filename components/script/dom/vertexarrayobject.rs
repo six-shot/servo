@@ -71,7 +71,7 @@ impl VertexArrayObject {
     }
 
     pub fn ever_bound(&self) -> bool {
-        return self.ever_bound.get();
+        self.ever_bound.get()
     }
 
     pub fn set_ever_bound(&self) {
@@ -106,20 +106,17 @@ impl VertexArrayObject {
             .get_mut(index as usize)
             .ok_or(WebGLError::InvalidValue)?;
 
-        if size < 1 || size > 4 {
+        if !(1..=4).contains(&size) {
             return Err(WebGLError::InvalidValue);
         }
 
         // https://www.khronos.org/registry/webgl/specs/latest/1.0/#BUFFER_OFFSET_AND_STRIDE
         // https://www.khronos.org/registry/webgl/specs/latest/1.0/#VERTEX_STRIDE
-        if stride < 0 || stride > 255 || offset < 0 {
+        if !(0..=255).contains(&stride) || offset < 0 {
             return Err(WebGLError::InvalidValue);
         }
 
-        let is_webgl2 = match self.context.webgl_version() {
-            WebGLVersion::WebGL2 => true,
-            _ => false,
-        };
+        let is_webgl2 = matches!(self.context.webgl_version(), WebGLVersion::WebGL2);
 
         let bytes_per_component: i32 = match type_ {
             constants::BYTE | constants::UNSIGNED_BYTE => 1,
@@ -296,7 +293,7 @@ impl Default for VertexAttribData {
 
 impl VertexAttribData {
     pub fn buffer(&self) -> Option<&WebGLBuffer> {
-        self.buffer.as_ref().map(|b| &**b)
+        self.buffer.as_deref()
     }
 
     pub fn max_vertices(&self) -> u32 {

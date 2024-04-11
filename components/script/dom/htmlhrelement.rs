@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use cssparser::RgbaLegacy;
 use dom_struct::dom_struct;
 use html5ever::{local_name, namespace_url, ns, LocalName, Prefix};
 use js::rust::HandleObject;
 use style::attr::{AttrValue, LengthOrPercentageOrAuto};
+use style::color::parsing::RgbaLegacy;
 
 use crate::dom::bindings::codegen::Bindings::HTMLHRElementBinding::HTMLHRElementMethods;
 use crate::dom::bindings::inheritance::Castable;
@@ -97,10 +97,10 @@ impl VirtualMethods for HTMLHRElement {
     }
 
     fn parse_plain_attribute(&self, name: &LocalName, value: DOMString) -> AttrValue {
-        match name {
-            &local_name!("align") => AttrValue::from_dimension(value.into()),
-            &local_name!("color") => AttrValue::from_legacy_color(value.into()),
-            &local_name!("width") => AttrValue::from_dimension(value.into()),
+        match *name {
+            local_name!("align") => AttrValue::from_dimension(value.into()),
+            local_name!("color") => AttrValue::from_legacy_color(value.into()),
+            local_name!("width") => AttrValue::from_dimension(value.into()),
             _ => self
                 .super_type()
                 .unwrap()

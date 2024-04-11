@@ -298,8 +298,8 @@ impl VirtualMethods for HTMLOptionElement {
 
     fn attribute_mutated(&self, attr: &Attr, mutation: AttributeMutation) {
         self.super_type().unwrap().attribute_mutated(attr, mutation);
-        match attr.local_name() {
-            &local_name!("disabled") => {
+        match *attr.local_name() {
+            local_name!("disabled") => {
                 let el = self.upcast::<Element>();
                 match mutation {
                     AttributeMutation::Set(_) => {
@@ -314,7 +314,7 @@ impl VirtualMethods for HTMLOptionElement {
                 }
                 self.update_select_validity();
             },
-            &local_name!("selected") => {
+            local_name!("selected") => {
                 match mutation {
                     AttributeMutation::Set(_) => {
                         // https://html.spec.whatwg.org/multipage/#concept-option-selectedness
@@ -336,7 +336,7 @@ impl VirtualMethods for HTMLOptionElement {
     }
 
     fn bind_to_tree(&self, context: &BindContext) {
-        if let Some(ref s) = self.super_type() {
+        if let Some(s) = self.super_type() {
             s.bind_to_tree(context);
         }
 

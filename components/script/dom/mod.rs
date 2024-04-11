@@ -209,6 +209,7 @@ pub mod types {
     include!(concat!(env!("OUT_DIR"), "/InterfaceTypes.rs"));
 }
 
+pub mod abstractrange;
 pub mod abstractworker;
 pub mod abstractworkerglobalscope;
 pub mod activation;
@@ -298,6 +299,7 @@ pub mod domstringmap;
 pub mod domtokenlist;
 pub mod dynamicmoduleowner;
 pub mod element;
+pub mod elementinternals;
 pub mod errorevent;
 pub mod event;
 pub mod eventsource;
@@ -318,7 +320,6 @@ pub mod gamepad;
 pub mod gamepadbutton;
 pub mod gamepadbuttonlist;
 pub mod gamepadevent;
-pub mod gamepadlist;
 pub mod gamepadpose;
 pub mod globalscope;
 pub mod gpu;
@@ -524,6 +525,7 @@ pub mod serviceworkerglobalscope;
 pub mod serviceworkerregistration;
 pub mod servoparser;
 pub mod shadowroot;
+pub mod staticrange;
 pub mod stereopannernode;
 pub mod storage;
 pub mod storageevent;

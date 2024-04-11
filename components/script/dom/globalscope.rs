@@ -63,10 +63,10 @@ use super::bindings::trace::HashMapTracedValues;
 use crate::dom::bindings::cell::{DomRefCell, RefMut};
 use crate::dom::bindings::codegen::Bindings::BroadcastChannelBinding::BroadcastChannelMethods;
 use crate::dom::bindings::codegen::Bindings::EventSourceBinding::EventSource_Binding::EventSourceMethods;
-use crate::dom::bindings::codegen::Bindings::GamepadListBinding::GamepadList_Binding::GamepadListMethods;
 use crate::dom::bindings::codegen::Bindings::ImageBitmapBinding::{
     ImageBitmapOptions, ImageBitmapSource,
 };
+use crate::dom::bindings::codegen::Bindings::NavigatorBinding::NavigatorMethods;
 use crate::dom::bindings::codegen::Bindings::PerformanceBinding::Performance_Binding::PerformanceMethods;
 use crate::dom::bindings::codegen::Bindings::PermissionStatusBinding::PermissionState;
 use crate::dom::bindings::codegen::Bindings::VoidFunctionBinding::VoidFunction;
@@ -294,6 +294,9 @@ pub struct GlobalScope {
     ///
     /// <https://html.spec.whatwg.org/multipage/#about-to-be-notified-rejected-promises-list>
     #[ignore_malloc_size_of = "mozjs"]
+    // `Heap` values must stay boxed, as they need semantics like `Pin`
+    // (that is, they cannot be moved).
+    #[allow(clippy::vec_box)]
     uncaught_rejections: DomRefCell<Vec<Box<Heap<*mut JSObject>>>>,
 
     /// Promises in this list have previously been reported as rejected
@@ -302,6 +305,9 @@ pub struct GlobalScope {
     ///
     /// <https://html.spec.whatwg.org/multipage/#outstanding-rejected-promises-weak-set>
     #[ignore_malloc_size_of = "mozjs"]
+    // `Heap` values must stay boxed, as they need semantics like `Pin`
+    // (that is, they cannot be moved).
+    #[allow(clippy::vec_box)]
     consumed_rejections: DomRefCell<Vec<Box<Heap<*mut JSObject>>>>,
 
     /// True if headless mode.
@@ -556,7 +562,7 @@ impl MessageListener {
 
                         for (id, buffer) in ports.into_iter() {
                             if global.is_managing_port(&id) {
-                                succeeded.push(id.clone());
+                                succeeded.push(id);
                                 global.complete_port_transfer(id, buffer);
                             } else {
                                 failed.insert(id, buffer);
@@ -630,7 +636,7 @@ impl FileListener {
 
                         let task = task!(enqueue_stream_chunk: move || {
                             let stream = trusted.root();
-                            stream_handle_incoming(&*stream, Ok(blob_buf.bytes));
+                            stream_handle_incoming(&stream, Ok(blob_buf.bytes));
                         });
 
                         let _ = self
@@ -654,7 +660,7 @@ impl FileListener {
 
                         let task = task!(enqueue_stream_chunk: move || {
                             let stream = trusted.root();
-                            stream_handle_incoming(&*stream, Ok(bytes_in));
+                            stream_handle_incoming(&stream, Ok(bytes_in));
                         });
 
                         let _ = self
@@ -692,7 +698,7 @@ impl FileListener {
 
                         let task = task!(enqueue_stream_chunk: move || {
                             let stream = trusted.root();
-                            stream_handle_eof(&*stream);
+                            stream_handle_eof(&stream);
                         });
 
                         let _ = self
@@ -728,7 +734,7 @@ impl FileListener {
                             let _ = self.task_source.queue_with_canceller(
                                 task!(error_stream: move || {
                                     let stream = trusted_stream.root();
-                                    stream_handle_incoming(&*stream, error);
+                                    stream_handle_incoming(&stream, error);
                                 }),
                                 &self.task_canceller,
                             );
@@ -742,6 +748,7 @@ impl FileListener {
 }
 
 impl GlobalScope {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_inherited(
         pipeline_id: PipelineId,
         devtools_chan: Option<IpcSender<ScriptToDevtoolsControlMsg>>,
@@ -804,7 +811,7 @@ impl GlobalScope {
     /// The message-port router Id of the global, if any
     fn port_router_id(&self) -> Option<MessagePortRouterId> {
         if let MessagePortState::Managed(id, _message_ports) = &*self.message_port_state.borrow() {
-            Some(id.clone())
+            Some(*id)
         } else {
             None
         }
@@ -815,7 +822,7 @@ impl GlobalScope {
         if let MessagePortState::Managed(_router_id, message_ports) =
             &*self.message_port_state.borrow()
         {
-            return message_ports.contains_key(&*port_id);
+            return message_ports.contains_key(port_id);
         }
         false
     }
@@ -831,7 +838,7 @@ impl GlobalScope {
         self.timers.setup_scheduling(timer_ipc_chan);
 
         // Setup route from IPC to task-queue for the timer-task-source.
-        let context = Trusted::new(&*self);
+        let context = Trusted::new(self);
         let (task_source, canceller) = (
             self.timer_task_source(),
             self.task_canceller(TaskSourceName::Timer),
@@ -869,13 +876,12 @@ impl GlobalScope {
         }
 
         // Step 2.1 -> 2.5
-        let new_registration =
-            ServiceWorkerRegistration::new(self, scope.clone(), registration_id.clone());
+        let new_registration = ServiceWorkerRegistration::new(self, scope.clone(), registration_id);
 
         // Step 2.6
         if let Some(worker_id) = installing_worker {
             let worker = self.get_serviceworker(script_url, scope, worker_id);
-            new_registration.set_installing(&*worker);
+            new_registration.set_installing(&worker);
         }
 
         // TODO: 2.7 (waiting worker)
@@ -905,8 +911,7 @@ impl GlobalScope {
         } else {
             // Step 2.1
             // TODO: step 2.2, worker state.
-            let new_worker =
-                ServiceWorker::new(self, script_url.clone(), scope.clone(), worker_id.clone());
+            let new_worker = ServiceWorker::new(self, script_url.clone(), scope.clone(), worker_id);
 
             // Step 2.3
             workers.insert(worker_id, Dom::from_ref(&*new_worker));
@@ -964,7 +969,7 @@ impl GlobalScope {
         self.list_auto_close_worker
             .borrow_mut()
             .drain(0..)
-            .for_each(|worker| drop(worker));
+            .for_each(drop);
     }
 
     /// Update our state to un-managed,
@@ -975,7 +980,7 @@ impl GlobalScope {
         {
             let _ = self
                 .script_to_constellation_chan()
-                .send(ScriptMsg::RemoveMessagePortRouter(router_id.clone()));
+                .send(ScriptMsg::RemoveMessagePortRouter(*router_id));
         }
         *self.message_port_state.borrow_mut() = MessagePortState::UnManaged;
     }
@@ -989,7 +994,7 @@ impl GlobalScope {
             let _ =
                 self.script_to_constellation_chan()
                     .send(ScriptMsg::RemoveBroadcastChannelRouter(
-                        router_id.clone(),
+                        *router_id,
                         self.origin().immutable().clone(),
                     ));
         }
@@ -1002,14 +1007,14 @@ impl GlobalScope {
             &mut *self.message_port_state.borrow_mut()
         {
             for (port_id, entangled_id) in &[(port1, port2), (port2, port1)] {
-                match message_ports.get_mut(&*port_id) {
+                match message_ports.get_mut(port_id) {
                     None => {
                         return warn!("entangled_ports called on a global not managing the port.");
                     },
                     Some(managed_port) => {
                         if let Some(port_impl) = managed_port.port_impl.as_mut() {
-                            managed_port.dom_port.entangle(entangled_id.clone());
-                            port_impl.entangle(entangled_id.clone());
+                            managed_port.dom_port.entangle(*entangled_id);
+                            port_impl.entangle(*entangled_id);
                         } else {
                             panic!("managed-port has no port-impl.");
                         }
@@ -1043,7 +1048,7 @@ impl GlobalScope {
             &mut *self.message_port_state.borrow_mut()
         {
             let mut port_impl = message_ports
-                .remove(&*port_id)
+                .remove(port_id)
                 .map(|ref mut managed_port| {
                     managed_port
                         .port_impl
@@ -1054,7 +1059,7 @@ impl GlobalScope {
             port_impl.set_has_been_shipped();
             let _ = self
                 .script_to_constellation_chan()
-                .send(ScriptMsg::MessagePortShipped(port_id.clone()));
+                .send(ScriptMsg::MessagePortShipped(*port_id));
             port_impl
         } else {
             panic!("mark_port_as_transferred called on a global not managing any ports.");
@@ -1066,7 +1071,7 @@ impl GlobalScope {
         if let MessagePortState::Managed(_id, message_ports) =
             &mut *self.message_port_state.borrow_mut()
         {
-            let message_buffer = match message_ports.get_mut(&*port_id) {
+            let message_buffer = match message_ports.get_mut(port_id) {
                 None => panic!("start_message_port called on a unknown port."),
                 Some(managed_port) => {
                     if let Some(port_impl) = managed_port.port_impl.as_mut() {
@@ -1078,19 +1083,19 @@ impl GlobalScope {
             };
             if let Some(message_buffer) = message_buffer {
                 for task in message_buffer {
-                    let port_id = port_id.clone();
-                    let this = Trusted::new(&*self);
+                    let port_id = *port_id;
+                    let this = Trusted::new(self);
                     let _ = self.port_message_queue().queue(
                         task!(process_pending_port_messages: move || {
                             let target_global = this.root();
                             target_global.route_task_to_port(port_id, task);
                         }),
-                        &self,
+                        self,
                     );
                 }
             }
         } else {
-            return warn!("start_message_port called on a global not managing any ports.");
+            warn!("start_message_port called on a global not managing any ports.")
         }
     }
 
@@ -1099,7 +1104,7 @@ impl GlobalScope {
         if let MessagePortState::Managed(_id, message_ports) =
             &mut *self.message_port_state.borrow_mut()
         {
-            match message_ports.get_mut(&*port_id) {
+            match message_ports.get_mut(port_id) {
                 None => panic!("close_message_port called on an unknown port."),
                 Some(managed_port) => {
                     if let Some(port_impl) = managed_port.port_impl.as_mut() {
@@ -1111,7 +1116,7 @@ impl GlobalScope {
                 },
             };
         } else {
-            return warn!("close_message_port called on a global not managing any ports.");
+            warn!("close_message_port called on a global not managing any ports.")
         }
     }
 
@@ -1133,7 +1138,7 @@ impl GlobalScope {
             };
             if let Some(entangled_id) = entangled_port {
                 // Step 7
-                let this = Trusted::new(&*self);
+                let this = Trusted::new(self);
                 let _ = self.port_message_queue().queue(
                     task!(post_message: move || {
                         let global = this.root();
@@ -1145,7 +1150,7 @@ impl GlobalScope {
                 );
             }
         } else {
-            return warn!("post_messageport_msg called on a global not managing any ports.");
+            warn!("post_messageport_msg called on a global not managing any ports.");
         }
     }
 
@@ -1172,7 +1177,7 @@ impl GlobalScope {
             // we could skip the hop to the constellation.
             let _ = self
                 .script_to_constellation_chan()
-                .send(ScriptMsg::ScheduleBroadcast(router_id.clone(), msg));
+                .send(ScriptMsg::ScheduleBroadcast(*router_id, msg));
         } else {
             panic!("Attemps to broadcast a message via global not managing any channels.");
         }
@@ -1211,7 +1216,7 @@ impl GlobalScope {
             if let Some(channels) = channels.get(&channel_name) {
                 channels
                     .iter()
-                    .filter(|ref channel| {
+                    .filter(|channel| {
                         // Step 8.
                         // Filter out the sender.
                         if let Some(id) = channel_id {
@@ -1230,7 +1235,7 @@ impl GlobalScope {
                         // Step 10: Queue a task on the DOM manipulation task-source,
                         // to fire the message event
                         let channel = Trusted::new(&*channel);
-                        let global = Trusted::new(&*self);
+                        let global = Trusted::new(self);
                         let _ = self.dom_manipulation_task_source().queue(
                             task!(process_pending_port_messages: move || {
                                 let destination = channel.root();
@@ -1247,7 +1252,7 @@ impl GlobalScope {
                                 if let Ok(ports) = structuredclone::read(&global, data, message.handle_mut()) {
                                     // Step 10.4, Fire an event named message at destination.
                                     MessageEvent::dispatch_jsval(
-                                        &*destination.upcast(),
+                                        destination.upcast(),
                                         &global,
                                         message.handle(),
                                         Some(&origin.ascii_serialization()),
@@ -1256,10 +1261,10 @@ impl GlobalScope {
                                     );
                                 } else {
                                     // Step 10.3, fire an event named messageerror at destination.
-                                    MessageEvent::dispatch_error(&*destination.upcast(), &global);
+                                    MessageEvent::dispatch_error(destination.upcast(), &global);
                                 }
                             }),
-                            &self,
+                            self,
                         );
                     });
             }
@@ -1300,7 +1305,7 @@ impl GlobalScope {
                 // Substep 6
                 // Dispatch the event, using the dom message-port.
                 MessageEvent::dispatch_jsval(
-                    &dom_port.upcast(),
+                    dom_port.upcast(),
                     self,
                     message_clone.handle(),
                     Some(&origin.ascii_serialization()),
@@ -1309,7 +1314,7 @@ impl GlobalScope {
                 );
             } else {
                 // Step 4, fire messageerror event.
-                MessageEvent::dispatch_error(&dom_port.upcast(), self);
+                MessageEvent::dispatch_error(dom_port.upcast(), self);
             }
         }
     }
@@ -1324,7 +1329,7 @@ impl GlobalScope {
                 .iter()
                 .filter_map(|(id, managed_port)| {
                     if managed_port.pending {
-                        Some(id.clone())
+                        Some(*id)
                     } else {
                         None
                     }
@@ -1332,7 +1337,7 @@ impl GlobalScope {
                 .collect();
             for id in to_be_added.iter() {
                 let managed_port = message_ports
-                    .get_mut(&*id)
+                    .get_mut(id)
                     .expect("Collected port-id to match an entry");
                 if !managed_port.pending {
                     panic!("Only pending ports should be found in to_be_added")
@@ -1342,7 +1347,7 @@ impl GlobalScope {
             let _ =
                 self.script_to_constellation_chan()
                     .send(ScriptMsg::CompleteMessagePortTransfer(
-                        router_id.clone(),
+                        *router_id,
                         to_be_added,
                     ));
         } else {
@@ -1357,14 +1362,14 @@ impl GlobalScope {
         {
             let to_be_removed: Vec<MessagePortId> = message_ports
                 .iter()
-                .filter_map(|(id, ref managed_port)| {
+                .filter_map(|(id, managed_port)| {
                     if managed_port.closed {
                         // Let the constellation know to drop this port and the one it is entangled with,
                         // and to forward this message to the script-process where the entangled is found.
                         let _ = self
                             .script_to_constellation_chan()
-                            .send(ScriptMsg::RemoveMessagePort(id.clone()));
-                        Some(id.clone())
+                            .send(ScriptMsg::RemoveMessagePort(*id));
+                        Some(*id)
                     } else {
                         None
                     }
@@ -1390,11 +1395,11 @@ impl GlobalScope {
             &mut *self.broadcast_channel_state.borrow_mut()
         {
             channels.retain(|name, ref mut channels| {
-                channels.retain(|ref chan| !chan.closed());
+                channels.retain(|chan| !chan.closed());
                 if channels.is_empty() {
                     let _ = self.script_to_constellation_chan().send(
                         ScriptMsg::RemoveBroadcastChannelNameInRouter(
-                            router_id.clone(),
+                            *router_id,
                             name.to_string(),
                             self.origin().immutable().clone(),
                         ),
@@ -1442,7 +1447,7 @@ impl GlobalScope {
                 }),
             );
             let router_id = BroadcastChannelRouterId::new();
-            *current_state = BroadcastChannelState::Managed(router_id.clone(), HashMap::new());
+            *current_state = BroadcastChannelState::Managed(router_id, HashMap::new());
             let _ = self
                 .script_to_constellation_chan()
                 .send(ScriptMsg::NewBroadcastChannelRouter(
@@ -1456,7 +1461,7 @@ impl GlobalScope {
             let entry = channels.entry(dom_channel.Name()).or_insert_with(|| {
                 let _ = self.script_to_constellation_chan().send(
                     ScriptMsg::NewBroadcastChannelNameInRouter(
-                        router_id.clone(),
+                        *router_id,
                         dom_channel.Name().to_string(),
                         self.origin().immutable().clone(),
                     ),
@@ -1498,8 +1503,7 @@ impl GlobalScope {
                 }),
             );
             let router_id = MessagePortRouterId::new();
-            *current_state =
-                MessagePortState::Managed(router_id.clone(), HashMapTracedValues::new());
+            *current_state = MessagePortState::Managed(router_id, HashMapTracedValues::new());
             let _ = self
                 .script_to_constellation_chan()
                 .send(ScriptMsg::NewMessagePortRouter(
@@ -1514,7 +1518,7 @@ impl GlobalScope {
                 // and only ask the constellation to complete the transfer
                 // if they're not re-shipped in the current task.
                 message_ports.insert(
-                    dom_port.message_port_id().clone(),
+                    *dom_port.message_port_id(),
                     ManagedMessagePort {
                         port_impl: Some(port_impl),
                         dom_port: Dom::from_ref(dom_port),
@@ -1525,19 +1529,19 @@ impl GlobalScope {
 
                 // Queue a task to complete the transfer,
                 // unless the port is re-transferred in the current task.
-                let this = Trusted::new(&*self);
+                let this = Trusted::new(self);
                 let _ = self.port_message_queue().queue(
                     task!(process_pending_port_messages: move || {
                         let target_global = this.root();
                         target_global.maybe_add_pending_ports();
                     }),
-                    &self,
+                    self,
                 );
             } else {
                 // If this is a newly-created port, let the constellation immediately know.
-                let port_impl = MessagePortImpl::new(dom_port.message_port_id().clone());
+                let port_impl = MessagePortImpl::new(*dom_port.message_port_id());
                 message_ports.insert(
-                    dom_port.message_port_id().clone(),
+                    *dom_port.message_port_id(),
                     ManagedMessagePort {
                         port_impl: Some(port_impl),
                         dom_port: Dom::from_ref(dom_port),
@@ -1548,8 +1552,8 @@ impl GlobalScope {
                 let _ = self
                     .script_to_constellation_chan()
                     .send(ScriptMsg::NewMessagePort(
-                        router_id.clone(),
-                        dom_port.message_port_id().clone(),
+                        *router_id,
+                        *dom_port.message_port_id(),
                     ));
             };
         } else {
@@ -1671,12 +1675,10 @@ impl GlobalScope {
             let blob_state = self.blob_state.borrow();
             if let BlobState::Managed(blobs_map) = &*blob_state {
                 let blob_info = blobs_map
-                    .get(&blob_id)
+                    .get(blob_id)
                     .expect("get_blob_bytes for an unknown blob.");
                 match blob_info.blob_impl.blob_data() {
-                    BlobData::Sliced(ref parent, ref rel_pos) => {
-                        Some((parent.clone(), rel_pos.clone()))
-                    },
+                    BlobData::Sliced(ref parent, ref rel_pos) => Some((*parent, rel_pos.clone())),
                     _ => None,
                 }
             } else {
@@ -1698,7 +1700,7 @@ impl GlobalScope {
         let blob_state = self.blob_state.borrow();
         if let BlobState::Managed(blobs_map) = &*blob_state {
             let blob_info = blobs_map
-                .get(&blob_id)
+                .get(blob_id)
                 .expect("get_blob_bytes_non_sliced called for a unknown blob.");
             match blob_info.blob_impl.blob_data() {
                 BlobData::File(ref f) => {
@@ -1736,12 +1738,10 @@ impl GlobalScope {
             let blob_state = self.blob_state.borrow();
             if let BlobState::Managed(blobs_map) = &*blob_state {
                 let blob_info = blobs_map
-                    .get(&blob_id)
+                    .get(blob_id)
                     .expect("get_blob_bytes_or_file_id for an unknown blob.");
                 match blob_info.blob_impl.blob_data() {
-                    BlobData::Sliced(ref parent, ref rel_pos) => {
-                        Some((parent.clone(), rel_pos.clone()))
-                    },
+                    BlobData::Sliced(ref parent, ref rel_pos) => Some((*parent, rel_pos.clone())),
                     _ => None,
                 }
             } else {
@@ -1772,7 +1772,7 @@ impl GlobalScope {
         let blob_state = self.blob_state.borrow();
         if let BlobState::Managed(blobs_map) = &*blob_state {
             let blob_info = blobs_map
-                .get(&blob_id)
+                .get(blob_id)
                 .expect("get_blob_bytes_non_sliced_or_file_id called for a unknown blob.");
             match blob_info.blob_impl.blob_data() {
                 BlobData::File(ref f) => match f.get_cache() {
@@ -1794,7 +1794,7 @@ impl GlobalScope {
         let blob_state = self.blob_state.borrow();
         if let BlobState::Managed(blobs_map) = &*blob_state {
             let blob_info = blobs_map
-                .get(&blob_id)
+                .get(blob_id)
                 .expect("get_blob_type_string called for a unknown blob.");
             blob_info.blob_impl.type_string()
         } else {
@@ -1808,12 +1808,10 @@ impl GlobalScope {
         if let BlobState::Managed(blobs_map) = &*blob_state {
             let parent = {
                 let blob_info = blobs_map
-                    .get(&blob_id)
+                    .get(blob_id)
                     .expect("get_blob_size called for a unknown blob.");
                 match blob_info.blob_impl.blob_data() {
-                    BlobData::Sliced(ref parent, ref rel_pos) => {
-                        Some((parent.clone(), rel_pos.clone()))
-                    },
+                    BlobData::Sliced(ref parent, ref rel_pos) => Some((*parent, rel_pos.clone())),
                     _ => None,
                 }
             };
@@ -1830,9 +1828,7 @@ impl GlobalScope {
                     rel_pos.to_abs_range(parent_size as usize).len() as u64
                 },
                 None => {
-                    let blob_info = blobs_map
-                        .get(&blob_id)
-                        .expect("Blob whose size is unknown.");
+                    let blob_info = blobs_map.get(blob_id).expect("Blob whose size is unknown.");
                     match blob_info.blob_impl.blob_data() {
                         BlobData::File(ref f) => f.get_size(),
                         BlobData::Memory(ref v) => v.len() as u64,
@@ -1852,16 +1848,14 @@ impl GlobalScope {
         if let BlobState::Managed(blobs_map) = &mut *blob_state {
             let parent = {
                 let blob_info = blobs_map
-                    .get_mut(&blob_id)
+                    .get_mut(blob_id)
                     .expect("get_blob_url_id called for a unknown blob.");
 
                 // Keep track of blobs with outstanding URLs.
                 blob_info.has_url = true;
 
                 match blob_info.blob_impl.blob_data() {
-                    BlobData::Sliced(ref parent, ref rel_pos) => {
-                        Some((parent.clone(), rel_pos.clone()))
-                    },
+                    BlobData::Sliced(ref parent, ref rel_pos) => Some((*parent, rel_pos.clone())),
                     _ => None,
                 }
             };
@@ -1878,13 +1872,13 @@ impl GlobalScope {
                     };
                     let parent_size = rel_pos.to_abs_range(parent_size as usize).len() as u64;
                     let blob_info = blobs_map
-                        .get_mut(&blob_id)
+                        .get_mut(blob_id)
                         .expect("Blob whose url is requested is unknown.");
                     self.create_sliced_url_id(blob_info, &parent_file_id, &rel_pos, parent_size)
                 },
                 None => {
                     let blob_info = blobs_map
-                        .get_mut(&blob_id)
+                        .get_mut(blob_id)
                         .expect("Blob whose url is requested is unknown.");
                     self.promote(blob_info, /* set_valid is */ true)
                 },
@@ -1906,7 +1900,7 @@ impl GlobalScope {
 
         let (tx, rx) = profile_ipc::channel(self.time_profiler_chan().clone()).unwrap();
         let msg = FileManagerThreadMsg::AddSlicedURLEntry(
-            parent_file_id.clone(),
+            *parent_file_id,
             rel_pos.clone(),
             tx,
             origin.clone(),
@@ -1915,7 +1909,7 @@ impl GlobalScope {
         match rx.recv().expect("File manager thread is down.") {
             Ok(new_id) => {
                 *blob_info.blob_impl.blob_data_mut() = BlobData::File(FileBlob::new(
-                    new_id.clone(),
+                    new_id,
                     None,
                     None,
                     rel_pos.to_abs_range(parent_len as usize).len() as u64,
@@ -1979,7 +1973,7 @@ impl GlobalScope {
         self.send_to_file_manager(msg);
 
         *blob_info.blob_impl.blob_data_mut() = BlobData::File(FileBlob::new(
-            id.clone(),
+            id,
             None,
             Some(bytes.to_vec()),
             bytes.len() as u64,
@@ -2011,7 +2005,7 @@ impl GlobalScope {
 
         let stream = ReadableStream::new_with_external_underlying_source(
             self,
-            ExternalUnderlyingSource::Blob(size as usize),
+            ExternalUnderlyingSource::Blob(size),
         );
 
         let recv = self.send_msg(file_id);
@@ -2122,7 +2116,7 @@ impl GlobalScope {
             .push(AutoCloseWorker {
                 closing,
                 join_handle: Some(join_handle),
-                control_sender: control_sender,
+                control_sender,
                 context,
             });
     }
@@ -2206,6 +2200,9 @@ impl GlobalScope {
         }
     }
 
+    // `Heap` values must stay boxed, as they need semantics like `Pin`
+    // (that is, they cannot be moved).
+    #[allow(clippy::vec_box)]
     pub fn get_uncaught_rejections(&self) -> &DomRefCell<Vec<Box<Heap<*mut JSObject>>>> {
         &self.uncaught_rejections
     }
@@ -2227,6 +2224,9 @@ impl GlobalScope {
         }
     }
 
+    // `Heap` values must stay boxed, as they need semantics like `Pin`
+    // (that is, they cannot be moved).
+    #[allow(clippy::vec_box)]
     pub fn get_consumed_rejections(&self) -> &DomRefCell<Vec<Box<Heap<*mut JSObject>>>> {
         &self.consumed_rejections
     }
@@ -2297,7 +2297,7 @@ impl GlobalScope {
     pub fn issue_page_warning(&self, warning: &str) {
         if let Some(ref chan) = self.devtools_chan {
             let _ = chan.send(ScriptToDevtoolsControlMsg::ReportPageError(
-                self.pipeline_id.clone(),
+                self.pipeline_id,
                 PageError {
                     type_: "PageError".to_string(),
                     errorMessage: warning.to_string(),
@@ -2485,7 +2485,7 @@ impl GlobalScope {
             } else if self.is::<Window>() {
                 if let Some(ref chan) = self.devtools_chan {
                     let _ = chan.send(ScriptToDevtoolsControlMsg::ReportPageError(
-                        self.pipeline_id.clone(),
+                        self.pipeline_id,
                         PageError {
                             type_: "PageError".to_string(),
                             errorMessage: error_info.message.clone(),
@@ -2644,7 +2644,7 @@ impl GlobalScope {
             || {
                 let cx = GlobalScope::get_cx();
 
-                let ar = enter_realm(&*self);
+                let ar = enter_realm(self);
 
                 let _aes = AutoEntryScript::new(self);
 
@@ -2762,7 +2762,7 @@ impl GlobalScope {
 
     pub fn queue_function_as_microtask(&self, callback: Rc<VoidFunction>) {
         self.enqueue_microtask(Microtask::User(UserMicrotask {
-            callback: callback,
+            callback,
             pipeline: self.pipeline_id(),
         }))
     }
@@ -2784,7 +2784,7 @@ impl GlobalScope {
             return p;
         }
 
-        let promise = match image {
+        match image {
             ImageBitmapSource::HTMLCanvasElement(ref canvas) => {
                 // https://html.spec.whatwg.org/multipage/#check-the-usability-of-the-image-argument
                 if !canvas.is_valid() {
@@ -2797,7 +2797,7 @@ impl GlobalScope {
                         .map(|data| data.to_vec())
                         .unwrap_or_else(|| vec![0; size.area() as usize * 4]);
 
-                    let image_bitmap = ImageBitmap::new(&self, size.width, size.height).unwrap();
+                    let image_bitmap = ImageBitmap::new(self, size.width, size.height).unwrap();
 
                     image_bitmap.set_bitmap_data(data);
                     image_bitmap.set_origin_clean(canvas.origin_is_clean());
@@ -2817,7 +2817,7 @@ impl GlobalScope {
                         .map(|data| data.to_vec())
                         .unwrap_or_else(|| vec![0; size.area() as usize * 4]);
 
-                    let image_bitmap = ImageBitmap::new(&self, size.width, size.height).unwrap();
+                    let image_bitmap = ImageBitmap::new(self, size.width, size.height).unwrap();
                     image_bitmap.set_bitmap_data(data);
                     image_bitmap.set_origin_clean(canvas.origin_is_clean());
                     p.resolve_native(&(image_bitmap));
@@ -2826,10 +2826,9 @@ impl GlobalScope {
             },
             _ => {
                 p.reject_error(Error::NotSupported);
-                return p;
+                p
             },
-        };
-        promise
+        }
     }
 
     pub fn fire_timer(&self, handle: TimerEventId) {
@@ -3134,30 +3133,26 @@ impl GlobalScope {
     /// <https://www.w3.org/TR/gamepad/#dfn-gamepadconnected>
     pub fn handle_gamepad_connect(
         &self,
-        index: usize,
+        // As the spec actually defines how to set the gamepad index, the GilRs index
+        // is currently unused, though in practice it will almost always be the same.
+        // More infra is currently needed to track gamepads across windows.
+        _index: usize,
         name: String,
         axis_bounds: (f64, f64),
         button_bounds: (f64, f64),
     ) {
         // TODO: 2. If document is not null and is not allowed to use the "gamepad" permission,
         //          then abort these steps.
-        let this = Trusted::new(&*self);
+        let this = Trusted::new(self);
         self.gamepad_task_source().queue_with_canceller(
             task!(gamepad_connected: move || {
                 let global = this.root();
-                let gamepad = Gamepad::new(&global, index as u32, name, axis_bounds, button_bounds);
 
                 if let Some(window) = global.downcast::<Window>() {
-                    let has_gesture = window.Navigator().has_gamepad_gesture();
-                    if has_gesture {
-                        gamepad.set_exposed(true);
-                        if window.Document().is_fully_active() {
-                            gamepad.update_connected(true, has_gesture);
-                        }
-                    }
-                    let gamepad_list = window.Navigator().gamepads();
-                    let gamepad_arr: [DomRoot<Gamepad>; 1] = [gamepad.clone()];
-                    gamepad_list.add_if_not_exists(&gamepad_arr);
+                    let navigator = window.Navigator();
+                    let selected_index = navigator.select_gamepad_index();
+                    let gamepad = Gamepad::new(&global, selected_index, name, axis_bounds, button_bounds);
+                    navigator.set_gamepad(selected_index as usize, &*gamepad);
                 }
             }),
             &self.task_canceller(TaskSourceName::Gamepad)
@@ -3167,24 +3162,17 @@ impl GlobalScope {
 
     /// <https://www.w3.org/TR/gamepad/#dfn-gamepaddisconnected>
     pub fn handle_gamepad_disconnect(&self, index: usize) {
-        let this = Trusted::new(&*self);
+        let this = Trusted::new(self);
         self.gamepad_task_source()
             .queue_with_canceller(
                 task!(gamepad_disconnected: move || {
                     let global = this.root();
                     if let Some(window) = global.downcast::<Window>() {
-                        let gamepad_list = window.Navigator().gamepads();
-                        if let Some(gamepad) = gamepad_list.Item(index as u32) {
+                        let navigator = window.Navigator();
+                        if let Some(gamepad) = navigator.get_gamepad(index) {
                             if window.Document().is_fully_active() {
                                 gamepad.update_connected(false, gamepad.exposed());
-                                gamepad_list.remove_gamepad(index);
-                            }
-                        }
-                        for i in (0..gamepad_list.Length()).rev() {
-                            if gamepad_list.Item(i as u32).is_none() {
-                                gamepad_list.remove_gamepad(i as usize);
-                            } else {
-                                break;
+                                navigator.remove_gamepad(index);
                             }
                         }
                     }
@@ -3196,7 +3184,7 @@ impl GlobalScope {
 
     /// <https://www.w3.org/TR/gamepad/#receiving-inputs>
     pub fn receive_new_gamepad_button_or_axis(&self, index: usize, update_type: GamepadUpdateType) {
-        let this = Trusted::new(&*self);
+        let this = Trusted::new(self);
 
         // <https://w3c.github.io/gamepad/#dfn-update-gamepad-state>
         self.gamepad_task_source()
@@ -3204,11 +3192,10 @@ impl GlobalScope {
                 task!(update_gamepad_state: move || {
                     let global = this.root();
                     if let Some(window) = global.downcast::<Window>() {
-                        let gamepad_list = window.Navigator().gamepads();
-                        if let Some(gamepad) = gamepad_list.Item(index as u32) {
+                        let navigator = window.Navigator();
+                        if let Some(gamepad) = navigator.get_gamepad(index) {
                             let current_time = global.performance().Now();
                             gamepad.update_timestamp(*current_time);
-
                             match update_type {
                                 GamepadUpdateType::Axis(index, value) => {
                                     gamepad.map_and_normalize_axes(index, value);
@@ -3217,26 +3204,27 @@ impl GlobalScope {
                                     gamepad.map_and_normalize_buttons(index, value);
                                 }
                             };
-
-                            if !window.Navigator().has_gamepad_gesture() && contains_user_gesture(update_type) {
-                                window.Navigator().set_has_gamepad_gesture(true);
-                                for i in 0..gamepad_list.Length() {
-                                    if let Some(gamepad) = gamepad_list.Item(i as u32) {
+                            if !navigator.has_gamepad_gesture() && contains_user_gesture(update_type) {
+                                navigator.set_has_gamepad_gesture(true);
+                                navigator.GetGamepads()
+                                    .iter()
+                                    .filter_map(|g| g.as_ref())
+                                    .for_each(|gamepad| {
                                         gamepad.set_exposed(true);
                                         gamepad.update_timestamp(*current_time);
-                                        let new_gamepad = Trusted::new(&*gamepad);
+                                        let new_gamepad = Trusted::new(&**gamepad);
                                         if window.Document().is_fully_active() {
                                             window.task_manager().gamepad_task_source().queue_with_canceller(
                                                 task!(update_gamepad_connect: move || {
                                                     let gamepad = new_gamepad.root();
                                                     gamepad.notify_event(GamepadEventType::Connected);
                                                 }),
-                                                &window.upcast::<GlobalScope>().task_canceller(TaskSourceName::Gamepad),
+                                                &window.upcast::<GlobalScope>()
+                                                    .task_canceller(TaskSourceName::Gamepad),
                                             )
                                             .expect("Failed to queue update gamepad connect task.");
                                         }
-                                    }
-                                }
+                                });
                             }
                         }
                     }

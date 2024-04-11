@@ -206,7 +206,7 @@ impl RTCPeerConnection {
         let signaller = this.make_signaller();
         *this.controller.borrow_mut() = Some(ServoMedia::get().unwrap().create_webrtc(signaller));
         if let Some(ref servers) = config.iceServers {
-            if let Some(ref server) = servers.get(0) {
+            if let Some(server) = servers.get(0) {
                 let server = match server.urls {
                     StringOrStringSequence::String(ref s) => Some(s.clone()),
                     StringOrStringSequence::StringSequence(ref s) => s.get(0).cloned(),
@@ -307,7 +307,7 @@ impl RTCPeerConnection {
             DataChannelEvent::NewChannel => {
                 let channel = RTCDataChannel::new(
                     &self.global(),
-                    &self,
+                    self,
                     USVString::from("".to_owned()),
                     &RTCDataChannelInit::empty(),
                     Some(channel_id),
@@ -357,7 +357,7 @@ impl RTCPeerConnection {
     }
 
     pub fn unregister_data_channel(&self, id: &DataChannelId) {
-        self.data_channels.borrow_mut().remove(&id);
+        self.data_channels.borrow_mut().remove(id);
     }
 
     /// <https://www.w3.org/TR/webrtc/#update-ice-gathering-state>
@@ -565,9 +565,9 @@ impl RTCPeerConnectionMethods for RTCPeerConnection {
 
         // XXXManishearth add support for sdpMid
         if candidate.sdpMLineIndex.is_none() {
-            p.reject_error(Error::Type(format!(
-                "servo only supports sdpMLineIndex right now"
-            )));
+            p.reject_error(Error::Type(
+                "servo only supports sdpMLineIndex right now".to_string(),
+            ));
             return p;
         }
 
@@ -648,7 +648,7 @@ impl RTCPeerConnectionMethods for RTCPeerConnection {
                             let this = this.root();
                             let desc = desc.into();
                             let desc = RTCSessionDescription::Constructor(
-                                &this.global().as_window(),
+                                this.global().as_window(),
                                 None,
                                 &desc,
                             ).unwrap();
@@ -688,7 +688,7 @@ impl RTCPeerConnectionMethods for RTCPeerConnection {
                             let this = this.root();
                             let desc = desc.into();
                             let desc = RTCSessionDescription::Constructor(
-                                &this.global().as_window(),
+                                this.global().as_window(),
                                 None,
                                 &desc,
                             ).unwrap();
@@ -764,7 +764,7 @@ impl RTCPeerConnectionMethods for RTCPeerConnection {
         label: USVString,
         init: &RTCDataChannelInit,
     ) -> DomRoot<RTCDataChannel> {
-        RTCDataChannel::new(&self.global(), &self, label, init, None)
+        RTCDataChannel::new(&self.global(), self, label, init, None)
     }
 
     /// <https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-addtransceiver>

@@ -160,7 +160,7 @@ impl WebGL2RenderingContext {
             base: Dom::from_ref(&*base),
             occlusion_query: MutNullableDom::new(None),
             primitives_query: MutNullableDom::new(None),
-            samplers: samplers,
+            samplers,
             bound_copy_read_buffer: MutNullableDom::new(None),
             bound_copy_write_buffer: MutNullableDom::new(None),
             bound_pixel_pack_buffer: MutNullableDom::new(None),
@@ -427,10 +427,9 @@ impl WebGL2RenderingContext {
             let last_row_bytes = bytes_per_pixel
                 .checked_mul(width as usize)
                 .ok_or(InvalidOperation)?;
-            let result = full_row_bytes
+            full_row_bytes
                 .checked_add(last_row_bytes)
-                .ok_or(InvalidOperation)?;
-            result
+                .ok_or(InvalidOperation)?
         };
         let skipped_bytes = {
             let skipped_row_bytes = self
@@ -443,10 +442,9 @@ impl WebGL2RenderingContext {
                 .get()
                 .checked_mul(bytes_per_pixel)
                 .ok_or(InvalidOperation)?;
-            let result = skipped_row_bytes
+            skipped_row_bytes
                 .checked_add(skipped_pixel_bytes)
-                .ok_or(InvalidOperation)?;
-            result
+                .ok_or(InvalidOperation)?
         };
         Ok(ReadPixelsSizes {
             row_stride,
@@ -455,7 +453,7 @@ impl WebGL2RenderingContext {
         })
     }
 
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, clippy::too_many_arguments)]
     fn read_pixels_into(
         &self,
         x: i32,
@@ -848,6 +846,7 @@ impl WebGL2RenderingContext {
             .send_command(WebGLCommand::VertexAttribU(index, x, y, z, w));
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn tex_storage(
         &self,
         dimensions: u8,
@@ -892,8 +891,7 @@ impl WebGL2RenderingContext {
 
         handle_potential_webgl_error!(
             self.base,
-            texture.storage(target, levels, internal_format, width, height, depth),
-            return
+            texture.storage(target, levels, internal_format, width, height, depth)
         );
     }
 }
@@ -1151,7 +1149,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             constants::FRAMEBUFFER | constants::DRAW_FRAMEBUFFER => {
                 self.base.get_draw_framebuffer_slot()
             },
-            constants::READ_FRAMEBUFFER => &self.base.get_read_framebuffer_slot(),
+            constants::READ_FRAMEBUFFER => self.base.get_read_framebuffer_slot(),
             _ => {
                 self.base.webgl_error(InvalidEnum);
                 return NullValue();
@@ -1164,14 +1162,14 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             handle_potential_webgl_error!(
                 self.base,
                 self.get_specific_fb_attachment_param(cx, &fb, target, attachment, pname),
-                return NullValue()
+                NullValue()
             )
         } else {
             // The default framebuffer is bound to the target
             handle_potential_webgl_error!(
                 self.base,
                 self.get_default_fb_attachment_param(attachment, pname),
-                return NullValue()
+                NullValue()
             )
         }
     }
@@ -1243,7 +1241,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             },
             _ => return self.base.BindBuffer(target, buffer),
         };
-        self.base.bind_buffer_maybe(&slot, target, buffer);
+        self.base.bind_buffer_maybe(slot, target, buffer);
     }
 
     /// <https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.6>
@@ -1264,14 +1262,14 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             self.base.bind_framebuffer_to(
                 target,
                 framebuffer,
-                &self.base.get_read_framebuffer_slot(),
+                self.base.get_read_framebuffer_slot(),
             );
         }
         if bind_draw {
             self.base.bind_framebuffer_to(
                 target,
                 framebuffer,
-                &self.base.get_draw_framebuffer_slot(),
+                self.base.get_draw_framebuffer_slot(),
             );
         }
     }
@@ -1348,7 +1346,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
 
         let data_end = byte_offset + copy_bytes;
         let data: &[u8] = unsafe { &data.as_slice()[byte_offset..data_end] };
-        handle_potential_webgl_error!(self.base, bound_buffer.buffer_data(target, &data, usage));
+        handle_potential_webgl_error!(self.base, bound_buffer.buffer_data(target, data, usage));
     }
 
     /// <https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.5>
@@ -1743,19 +1741,19 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             return;
         }
         self.current_vao().unbind_buffer(buffer);
-        self.unbind_from(&self.base.array_buffer_slot(), &buffer);
-        self.unbind_from(&self.bound_copy_read_buffer, &buffer);
-        self.unbind_from(&self.bound_copy_write_buffer, &buffer);
-        self.unbind_from(&self.bound_pixel_pack_buffer, &buffer);
-        self.unbind_from(&self.bound_pixel_unpack_buffer, &buffer);
-        self.unbind_from(&self.bound_transform_feedback_buffer, &buffer);
-        self.unbind_from(&self.bound_uniform_buffer, &buffer);
+        self.unbind_from(self.base.array_buffer_slot(), buffer);
+        self.unbind_from(&self.bound_copy_read_buffer, buffer);
+        self.unbind_from(&self.bound_copy_write_buffer, buffer);
+        self.unbind_from(&self.bound_pixel_pack_buffer, buffer);
+        self.unbind_from(&self.bound_pixel_unpack_buffer, buffer);
+        self.unbind_from(&self.bound_transform_feedback_buffer, buffer);
+        self.unbind_from(&self.bound_uniform_buffer, buffer);
 
         for binding in self.indexed_uniform_buffer_bindings.iter() {
-            self.unbind_from(&binding.buffer, &buffer);
+            self.unbind_from(&binding.buffer, buffer);
         }
         for binding in self.indexed_transform_feedback_buffer_bindings.iter() {
-            self.unbind_from(&binding.buffer, &buffer);
+            self.unbind_from(&binding.buffer, buffer);
         }
 
         buffer.mark_for_deletion(Operation::Infallible);
@@ -2941,12 +2939,16 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
     ) -> Fallible<()> {
         let pixel_unpack_buffer = match self.bound_pixel_unpack_buffer.get() {
             Some(pixel_unpack_buffer) => pixel_unpack_buffer,
-            None => return Ok(self.base.webgl_error(InvalidOperation)),
+            None => {
+                self.base.webgl_error(InvalidOperation);
+                return Ok(());
+            },
         };
 
         if let Some(tf_buffer) = self.bound_transform_feedback_buffer.get() {
             if pixel_unpack_buffer == tf_buffer {
-                return Ok(self.base.webgl_error(InvalidOperation));
+                self.base.webgl_error(InvalidOperation);
+                return Ok(());
             }
         }
 
@@ -3013,7 +3015,8 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         source: ImageDataOrHTMLImageElementOrHTMLCanvasElementOrHTMLVideoElement,
     ) -> Fallible<()> {
         if self.bound_pixel_unpack_buffer.get().is_some() {
-            return Ok(self.base.webgl_error(InvalidOperation));
+            self.base.webgl_error(InvalidOperation);
+            return Ok(());
         }
 
         let validator = TexImage2DValidator::new(
@@ -3082,11 +3085,13 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         src_offset: u32,
     ) -> Fallible<()> {
         if self.bound_pixel_unpack_buffer.get().is_some() {
-            return Ok(self.base.webgl_error(InvalidOperation));
+            self.base.webgl_error(InvalidOperation);
+            return Ok(());
         }
 
         if type_ == constants::FLOAT_32_UNSIGNED_INT_24_8_REV {
-            return Ok(self.base.webgl_error(InvalidOperation));
+            self.base.webgl_error(InvalidOperation);
+            return Ok(());
         }
 
         let validator = TexImage2DValidator::new(
@@ -3122,7 +3127,8 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         let src_byte_offset = src_offset as usize * src_elem_size;
 
         if src_data.len() <= src_byte_offset {
-            return Ok(self.base.webgl_error(InvalidOperation));
+            self.base.webgl_error(InvalidOperation);
+            return Ok(());
         }
 
         let buff = IpcSharedMemory::from_bytes(unsafe { &src_data.as_slice()[src_byte_offset..] });
@@ -3142,7 +3148,8 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         };
 
         if expected_byte_length as usize > buff.len() {
-            return Ok(self.base.webgl_error(InvalidOperation));
+            self.base.webgl_error(InvalidOperation);
+            return Ok(());
         }
 
         let size = Size2D::new(width, height);
@@ -3212,7 +3219,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             constants::FRAMEBUFFER | constants::DRAW_FRAMEBUFFER => {
                 self.base.get_draw_framebuffer_slot()
             },
-            constants::READ_FRAMEBUFFER => &self.base.get_read_framebuffer_slot(),
+            constants::READ_FRAMEBUFFER => self.base.get_read_framebuffer_slot(),
             _ => {
                 self.base.webgl_error(InvalidEnum);
                 return 0;
@@ -3246,7 +3253,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             constants::FRAMEBUFFER | constants::DRAW_FRAMEBUFFER => {
                 self.base.get_draw_framebuffer_slot()
             },
-            constants::READ_FRAMEBUFFER => &self.base.get_read_framebuffer_slot(),
+            constants::READ_FRAMEBUFFER => self.base.get_read_framebuffer_slot(),
             _ => return self.base.webgl_error(InvalidEnum),
         };
 
@@ -4109,12 +4116,11 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             self.base.validate_ownership(program),
             return constants::INVALID_INDEX
         );
-        let index = handle_potential_webgl_error!(
+        handle_potential_webgl_error!(
             self.base,
             program.get_uniform_block_index(block_name),
             return constants::INVALID_INDEX
-        );
-        index
+        )
     }
 
     /// <https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.16>
@@ -4146,8 +4152,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             constants::UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES => unsafe {
                 let values = values.iter().map(|&v| v as u32).collect::<Vec<_>>();
                 rooted!(in(*cx) let mut result = ptr::null_mut::<JSObject>());
-                let _ = Uint32Array::create(*cx, CreateWith::Slice(&values), result.handle_mut())
-                    .unwrap();
+                Uint32Array::create(*cx, CreateWith::Slice(&values), result.handle_mut()).unwrap();
                 ObjectValue(result.get())
             },
             constants::UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER |
@@ -4188,8 +4193,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
 
         handle_potential_webgl_error!(
             self.base,
-            program.bind_uniform_block(block_index, block_binding),
-            return
+            program.bind_uniform_block(block_index, block_binding)
         )
     }
 
@@ -4378,7 +4382,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
                     ));
 
                 rooted!(in(*cx) let mut rval = ptr::null_mut::<JSObject>());
-                let _ = Int32Array::create(
+                Int32Array::create(
                     *cx,
                     CreateWith::Slice(&receiver.recv().unwrap()),
                     rval.handle_mut(),
@@ -4411,7 +4415,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         }
 
         if let Some(fb) = self.base.get_read_framebuffer_slot().get() {
-            handle_potential_webgl_error!(self.base, fb.set_read_buffer(src), return)
+            handle_potential_webgl_error!(self.base, fb.set_read_buffer(src))
         } else {
             match src {
                 constants::NONE | constants::BACK => {},
@@ -4426,7 +4430,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
     /// <https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.11>
     fn DrawBuffers(&self, buffers: Vec<u32>) {
         if let Some(fb) = self.base.get_draw_framebuffer_slot().get() {
-            handle_potential_webgl_error!(self.base, fb.set_draw_buffers(buffers), return)
+            handle_potential_webgl_error!(self.base, fb.set_draw_buffers(buffers))
         } else {
             if buffers.len() != 1 {
                 return self.base.webgl_error(InvalidOperation);
@@ -4470,8 +4474,8 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
 
 impl LayoutCanvasRenderingContextHelpers for LayoutDom<'_, WebGL2RenderingContext> {
     #[allow(unsafe_code)]
-    unsafe fn canvas_data_source(self) -> HTMLCanvasDataSource {
-        let this = &*self.unsafe_get();
-        (*this.base.to_layout().unsafe_get()).layout_handle()
+    fn canvas_data_source(self) -> HTMLCanvasDataSource {
+        let this = self.unsafe_get();
+        unsafe { (*this.base.to_layout().unsafe_get()).layout_handle() }
     }
 }

@@ -41,10 +41,10 @@ pub struct WebGPUContextId(pub u64);
 impl Clone for GPUCanvasConfiguration {
     fn clone(&self) -> Self {
         Self {
-            alphaMode: self.alphaMode.clone(),
+            alphaMode: self.alphaMode,
             device: self.device.clone(),
-            format: self.format.clone(),
-            usage: self.usage.clone(),
+            format: self.format,
+            usage: self.usage,
             viewFormats: self.viewFormats.clone(),
         }
     }
@@ -199,8 +199,7 @@ impl GPUCanvasContext {
 }
 
 impl LayoutCanvasRenderingContextHelpers for LayoutDom<'_, GPUCanvasContext> {
-    #[allow(unsafe_code)]
-    unsafe fn canvas_data_source(self) -> HTMLCanvasDataSource {
+    fn canvas_data_source(self) -> HTMLCanvasDataSource {
         (*self.unsafe_get()).layout_handle()
     }
 }

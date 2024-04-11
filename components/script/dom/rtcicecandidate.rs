@@ -84,9 +84,9 @@ impl RTCIceCandidate {
         config: &RTCIceCandidateInit,
     ) -> Fallible<DomRoot<RTCIceCandidate>> {
         if config.sdpMid.is_none() && config.sdpMLineIndex.is_none() {
-            return Err(Error::Type(format!(
-                "one of sdpMid and sdpMLineIndex must be set"
-            )));
+            return Err(Error::Type(
+                "one of sdpMid and sdpMLineIndex must be set".to_string(),
+            ));
         }
         Ok(RTCIceCandidate::new_with_proto(
             &window.global(),
@@ -112,7 +112,7 @@ impl RTCIceCandidateMethods for RTCIceCandidate {
 
     /// <https://w3c.github.io/webrtc-pc/#dom-rtcicecandidate-sdpmlineindex>
     fn GetSdpMLineIndex(&self) -> Option<u16> {
-        self.sdp_m_line_index.clone()
+        self.sdp_m_line_index
     }
 
     /// <https://w3c.github.io/webrtc-pc/#dom-rtcicecandidate-usernamefragment>
@@ -125,7 +125,7 @@ impl RTCIceCandidateMethods for RTCIceCandidate {
         RTCIceCandidateInit {
             candidate: self.candidate.clone(),
             sdpMid: self.sdp_m_id.clone(),
-            sdpMLineIndex: self.sdp_m_line_index.clone(),
+            sdpMLineIndex: self.sdp_m_line_index,
             usernameFragment: self.username_fragment.clone(),
         }
     }

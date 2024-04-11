@@ -114,6 +114,7 @@ pub struct GPUDevice {
 }
 
 impl GPUDevice {
+    #[allow(clippy::too_many_arguments)]
     fn new_inherited(
         channel: WebGPU,
         adapter: &GPUAdapter,
@@ -144,6 +145,7 @@ impl GPUDevice {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         global: &GlobalScope,
         channel: WebGPU,
@@ -164,7 +166,7 @@ impl GPUDevice {
             )),
             global,
         );
-        queue.set_device(&*device);
+        queue.set_device(&device);
         device
     }
 }
@@ -210,10 +212,8 @@ impl GPUDevice {
                 }
             }
             self.try_remove_scope(s_id);
-        } else {
-            if let Err((err, _)) = result {
-                self.fire_uncaptured_error(err);
-            }
+        } else if let Err((err, _)) = result {
+            self.fire_uncaptured_error(err);
         }
     }
 
@@ -418,7 +418,7 @@ impl GPUDeviceMethods for GPUDevice {
             &self.global(),
             self.channel.clone(),
             buffer,
-            &self,
+            self,
             state,
             descriptor.size,
             map_info,
@@ -499,7 +499,7 @@ impl GPUDeviceMethods for GPUDevice {
 
                 wgt::BindGroupLayoutEntry {
                     binding: bind.binding,
-                    visibility: visibility,
+                    visibility,
                     ty,
                     count: None,
                 }
@@ -653,7 +653,7 @@ impl GPUDeviceMethods for GPUDevice {
             &self.global(),
             bind_group,
             self.device,
-            &*descriptor.layout,
+            &descriptor.layout,
             descriptor.parent.label.clone().unwrap_or_default(),
         )
     }
@@ -733,8 +733,19 @@ impl GPUDeviceMethods for GPUDevice {
             compute_pipeline,
             descriptor.parent.parent.label.clone().unwrap_or_default(),
             bgls,
-            &self,
+            self,
         )
+    }
+
+    /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createcomputepipelineasync>
+    fn CreateComputePipelineAsync(
+        &self,
+        descriptor: &GPUComputePipelineDescriptor,
+        comp: InRealm,
+    ) -> Rc<Promise> {
+        let promise = Promise::new_in_current_realm(comp);
+        promise.resolve_native(&self.CreateComputePipeline(descriptor));
+        promise
     }
 
     /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createcommandencoder>
@@ -765,7 +776,7 @@ impl GPUDeviceMethods for GPUDevice {
         GPUCommandEncoder::new(
             &self.global(),
             self.channel.clone(),
-            &self,
+            self,
             encoder,
             descriptor.parent.label.clone().unwrap_or_default(),
         )
@@ -825,7 +836,7 @@ impl GPUDeviceMethods for GPUDevice {
         GPUTexture::new(
             &self.global(),
             texture,
-            &self,
+            self,
             self.channel.clone(),
             size,
             descriptor.mipLevelCount,
@@ -857,7 +868,7 @@ impl GPUDeviceMethods for GPUDevice {
             mipmap_filter: convert_filter_mode(descriptor.mipmapFilter),
             lod_min_clamp: *descriptor.lodMinClamp,
             lod_max_clamp: *descriptor.lodMaxClamp,
-            compare: descriptor.compare.map(|c| convert_compare_function(c)),
+            compare: descriptor.compare.map(convert_compare_function),
             anisotropy_clamp: 1,
             border_color: None,
         };
@@ -1036,8 +1047,19 @@ impl GPUDeviceMethods for GPUDevice {
             render_pipeline,
             descriptor.parent.parent.label.clone().unwrap_or_default(),
             bgls,
-            &self,
+            self,
         )
+    }
+
+    /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createrenderpipelineasync>
+    fn CreateRenderPipelineAsync(
+        &self,
+        descriptor: &GPURenderPipelineDescriptor,
+        comp: InRealm,
+    ) -> Rc<Promise> {
+        let promise = Promise::new_in_current_realm(comp);
+        promise.resolve_native(&self.CreateRenderPipeline(descriptor));
+        promise
     }
 
     /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createrenderbundleencoder>
@@ -1073,7 +1095,7 @@ impl GPUDeviceMethods for GPUDevice {
         GPURenderBundleEncoder::new(
             &self.global(),
             render_bundle_encoder,
-            &self,
+            self,
             self.channel.clone(),
             descriptor.parent.parent.label.clone().unwrap_or_default(),
         )
@@ -1147,19 +1169,6 @@ impl GPUDeviceMethods for GPUDevice {
                 warn!("Failed to send DestroyDevice ({:?}) ({})", self.device.0, e);
             }
         }
-    }
-
-    /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createcomputepipelineasync>
-    fn CreateComputePipelineAsync(
-        &self,
-        _descriptor: &GPUComputePipelineDescriptor,
-    ) -> Rc<Promise> {
-        todo!()
-    }
-
-    /// <https://gpuweb.github.io/gpuweb/#dom-gpudevice-createrenderpipelineasync>
-    fn CreateRenderPipelineAsync(&self, _descriptor: &GPURenderPipelineDescriptor) -> Rc<Promise> {
-        todo!()
     }
 }
 

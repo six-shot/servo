@@ -88,6 +88,9 @@ bitflags! {
         const IS_BODY_ELEMENT_OF_HTML_ELEMENT_ROOT = 0b00000001;
         /// Whether or not the node that created this Fragment is a `<br>` element.
         const IS_BR_ELEMENT = 0b00000010;
+        /// Whether or not this Fragment was created to contain a replaced element or is
+        /// a replaced element.
+        const IS_REPLACED = 0b00000100;
     }
 }
 
@@ -123,6 +126,6 @@ impl Tag {
             Some(PseudoElement::After) => FragmentType::AfterPseudoContent,
             _ => FragmentType::FragmentBody,
         };
-        combine_id_with_fragment_type(self.node.id(), fragment_type) as u64
+        combine_id_with_fragment_type(self.node.id(), fragment_type)
     }
 }

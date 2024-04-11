@@ -156,8 +156,8 @@ impl VirtualMethods for HTMLLabelElement {
 
     fn attribute_mutated(&self, attr: &Attr, mutation: AttributeMutation) {
         self.super_type().unwrap().attribute_mutated(attr, mutation);
-        match attr.local_name() {
-            &local_name!("form") => {
+        match *attr.local_name() {
+            local_name!("form") => {
                 self.form_attribute_mutated(mutation);
             },
             _ => {},
@@ -170,8 +170,7 @@ impl HTMLLabelElement {
         self.upcast::<Node>()
             .traverse_preorder(ShadowIncluding::No)
             .filter_map(DomRoot::downcast::<HTMLElement>)
-            .filter(|elem| elem.is_labelable_element())
-            .next()
+            .find(|elem| elem.is_labelable_element())
     }
 }
 
@@ -190,7 +189,7 @@ impl FormControl for HTMLLabelElement {
         // form owner. Therefore it doesn't hold form owner itself.
     }
 
-    fn to_element<'a>(&'a self) -> &'a Element {
+    fn to_element(&self) -> &Element {
         self.upcast::<Element>()
     }
 }

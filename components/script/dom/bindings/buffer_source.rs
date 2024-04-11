@@ -77,7 +77,7 @@ where
     let heap_buffer_source = match init {
         HeapTypedArrayInit::Buffer(buffer_source) => HeapBufferSource {
             buffer_source,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         },
         HeapTypedArrayInit::Info { len, cx } => {
             rooted!(in (*cx) let mut array = ptr::null_mut::<JSObject>());
@@ -124,8 +124,8 @@ where
 {
     pub fn default() -> HeapBufferSource<T> {
         HeapBufferSource {
-            buffer_source: BufferSource::Default(Box::new(Heap::default())),
-            phantom: PhantomData::default(),
+            buffer_source: BufferSource::Default(Box::default()),
+            phantom: PhantomData,
         }
     }
 
@@ -418,18 +418,17 @@ where
     /// without causing conflicts , unexpected behavior.
     /// <https://github.com/servo/mozjs/blob/main/mozjs-sys/mozjs/js/public/ArrayBuffer.h#L89>
     unsafe extern "C" fn free_func(_contents: *mut c_void, free_user_data: *mut c_void) {
-        let _ = Arc::from_raw(free_user_data as _);
+        let _ = Arc::from_raw(free_user_data as *const _);
     }
 
     unsafe {
-        let mapping_slice_ptr =
-            mapping.lock().unwrap().borrow_mut()[offset as usize..m_end as usize].as_mut_ptr();
+        let mapping_slice_ptr = mapping.lock().unwrap().borrow_mut()[offset..m_end].as_mut_ptr();
 
         // rooted! is needed to ensure memory safety and prevent potential garbage collection issues.
         // https://github.com/mozilla-spidermonkey/spidermonkey-embedding-examples/blob/esr78/docs/GC%20Rooting%20Guide.md#performance-tweaking
         rooted!(in(*cx) let array_buffer = NewExternalArrayBuffer(
             *cx,
-            range_size as usize,
+            range_size,
             mapping_slice_ptr as _,
             Some(free_func),
             Arc::into_raw(mapping) as _,
@@ -437,7 +436,7 @@ where
 
         HeapBufferSource {
             buffer_source: BufferSource::ArrayBuffer(Heap::boxed(*array_buffer)),
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 }

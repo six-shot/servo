@@ -7,10 +7,13 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Instant;
 
-use egui::{CentralPanel, Frame, InnerResponse, Key, Modifiers, PaintCallback, TopBottomPanel};
+use egui::{
+    CentralPanel, Color32, Frame, Key, Modifiers, PaintCallback, Pos2, Spinner, TopBottomPanel,
+    Vec2,
+};
 use egui_glow::CallbackFn;
 use egui_winit::EventResponse;
-use euclid::{Length, Point2D, Scale};
+use euclid::{Box2D, Length, Point2D, Scale, Size2D};
 use gleam::gl;
 use glow::NativeFramebuffer;
 use log::{trace, warn};
@@ -19,12 +22,13 @@ use servo::msg::constellation_msg::TraversalDirection;
 use servo::rendering_context::RenderingContext;
 use servo::servo_geometry::DeviceIndependentPixel;
 use servo::servo_url::ServoUrl;
+use servo::style_traits::DevicePixel;
 
 use crate::egui_glue::EguiGlow;
 use crate::events_loop::EventsLoop;
 use crate::geometry::winit_position_to_euclid_point;
 use crate::parser::location_bar_input_to_url;
-use crate::webview::WebViewManager;
+use crate::webview::{LoadStatus, WebViewManager};
 use crate::window_trait::WindowPortsMethods;
 
 pub struct Minibrowser {
@@ -42,6 +46,8 @@ pub struct Minibrowser {
 
     /// Whether the location has been edited by the user without clicking Go.
     location_dirty: Cell<bool>,
+
+    load_status: LoadStatus,
 }
 
 pub enum MinibrowserEvent {
@@ -83,6 +89,7 @@ impl Minibrowser {
             last_mouse_position: None,
             location: RefCell::new(initial_url.to_string()),
             location_dirty: false.into(),
+            load_status: LoadStatus::LoadComplete,
         }
     }
 
@@ -121,6 +128,7 @@ impl Minibrowser {
     pub fn update(
         &mut self,
         window: &winit::window::Window,
+        webviews: &mut WebViewManager<dyn WindowPortsMethods>,
         servo_framebuffer_id: Option<gl::GLuint>,
         reason: &'static str,
     ) {
@@ -142,57 +150,90 @@ impl Minibrowser {
         } = self;
         let widget_fbo = *widget_surface_fbo;
         let _duration = context.run(window, |ctx| {
-            let InnerResponse { inner: height, .. } =
-                TopBottomPanel::top("toolbar").show(ctx, |ui| {
-                    ui.allocate_ui_with_layout(
-                        ui.available_size(),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            if ui.button("back").clicked() {
-                                event_queue.borrow_mut().push(MinibrowserEvent::Back);
-                            }
-                            if ui.button("forward").clicked() {
-                                event_queue.borrow_mut().push(MinibrowserEvent::Forward);
-                            }
-                            ui.allocate_ui_with_layout(
-                                ui.available_size(),
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui.button("go").clicked() {
-                                        event_queue.borrow_mut().push(MinibrowserEvent::Go);
-                                        location_dirty.set(false);
-                                    }
+            TopBottomPanel::top("toolbar").show(ctx, |ui| {
+                ui.allocate_ui_with_layout(
+                    ui.available_size(),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        if ui.button("back").clicked() {
+                            event_queue.borrow_mut().push(MinibrowserEvent::Back);
+                        }
+                        if ui.button("forward").clicked() {
+                            event_queue.borrow_mut().push(MinibrowserEvent::Forward);
+                        }
+                        ui.allocate_ui_with_layout(
+                            ui.available_size(),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                if ui.button("go").clicked() {
+                                    event_queue.borrow_mut().push(MinibrowserEvent::Go);
+                                    location_dirty.set(false);
+                                }
 
-                                    let location_field = ui.add_sized(
-                                        ui.available_size(),
-                                        egui::TextEdit::singleline(&mut *location.borrow_mut()),
-                                    );
+                                match self.load_status {
+                                    LoadStatus::LoadStart => {
+                                        ui.add(Spinner::new().color(Color32::GRAY));
+                                    },
+                                    LoadStatus::HeadParsed => {
+                                        ui.add(Spinner::new().color(Color32::WHITE));
+                                    },
+                                    LoadStatus::LoadComplete => { /* No Spinner */ },
+                                }
 
-                                    if location_field.changed() {
-                                        location_dirty.set(true);
-                                    }
-                                    if ui.input(|i| {
-                                        i.clone().consume_key(Modifiers::COMMAND, Key::L)
-                                    }) {
-                                        location_field.request_focus();
-                                    }
-                                    if location_field.lost_focus() &&
-                                        ui.input(|i| i.clone().key_pressed(Key::Enter))
-                                    {
-                                        event_queue.borrow_mut().push(MinibrowserEvent::Go);
-                                        location_dirty.set(false);
-                                    }
-                                },
-                            );
-                        },
-                    );
-                    ui.cursor().min.y
-                });
-            *toolbar_height = Length::new(height);
+                                let location_field = ui.add_sized(
+                                    ui.available_size(),
+                                    egui::TextEdit::singleline(&mut *location.borrow_mut()),
+                                );
 
+                                if location_field.changed() {
+                                    location_dirty.set(true);
+                                }
+                                if ui.input(|i| i.clone().consume_key(Modifiers::COMMAND, Key::L)) {
+                                    location_field.request_focus();
+                                }
+                                if location_field.lost_focus() &&
+                                    ui.input(|i| i.clone().key_pressed(Key::Enter))
+                                {
+                                    event_queue.borrow_mut().push(MinibrowserEvent::Go);
+                                    location_dirty.set(false);
+                                }
+                            },
+                        );
+                    },
+                );
+            });
+
+            // The toolbar height is where the Context’s available rect starts.
+            // For reasons that are unclear, the TopBottomPanel’s ui cursor exceeds this by one egui
+            // point, but the Context is correct and the TopBottomPanel is wrong.
+            *toolbar_height = Length::new(ctx.available_rect().min.y);
+
+            let scale =
+                Scale::<_, DeviceIndependentPixel, DevicePixel>::new(ctx.pixels_per_point());
+            let Some(focused_webview_id) = webviews.focused_webview_id() else {
+                return;
+            };
+            let Some(webview) = webviews.get_mut(focused_webview_id) else {
+                return;
+            };
+            let mut embedder_events = vec![];
             CentralPanel::default()
                 .frame(Frame::none())
                 .show(ctx, |ui| {
+                    let Pos2 { x, y } = ui.cursor().min;
+                    let Vec2 {
+                        x: width,
+                        y: height,
+                    } = ui.available_size();
+                    let rect = Box2D::from_origin_and_size(
+                        Point2D::new(x, y),
+                        Size2D::new(width, height),
+                    ) * scale;
+                    if rect != webview.rect {
+                        webview.rect = rect;
+                        embedder_events
+                            .push(EmbedderEvent::MoveResizeWebView(focused_webview_id, rect));
+                    }
                     let min = ui.cursor().min;
                     let size = ui.available_size();
                     let rect = egui::Rect::from_min_size(min, size);
@@ -241,6 +282,10 @@ impl Minibrowser {
                         })),
                     });
                 });
+
+            if !embedder_events.is_empty() {
+                webviews.handle_window_events(embedder_events);
+            }
 
             *last_update = now;
         });
@@ -313,5 +358,29 @@ impl Minibrowser {
             },
             _ => false,
         }
+    }
+
+    /// Updates the spinner from the given [WebViewManager], returning true iff it has changed
+    /// (needing an egui update).
+    pub fn update_spinner_in_toolbar(
+        &mut self,
+        browser: &mut WebViewManager<dyn WindowPortsMethods>,
+    ) -> bool {
+        let need_update = browser.load_status() != self.load_status;
+        self.load_status = browser.load_status();
+        need_update
+    }
+
+    /// Updates all fields taken from the given [WebViewManager], such as the location field.
+    /// Returns true iff the egui needs an update.
+    pub fn update_webview_data(
+        &mut self,
+        browser: &mut WebViewManager<dyn WindowPortsMethods>,
+    ) -> bool {
+        // Note: We must use the "bitwise OR" (|) operator here instead of "logical OR" (||)
+        //       because logical OR would short-circuit if any of the functions return true.
+        //       We want to ensure that all functions are called. The "bitwise OR" operator
+        //       does not short-circuit.
+        self.update_location_in_toolbar(browser) | self.update_spinner_in_toolbar(browser)
     }
 }

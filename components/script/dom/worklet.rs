@@ -70,9 +70,9 @@ struct DroppableField {
 impl Drop for DroppableField {
     fn drop(&mut self) {
         let worklet_id = self.worklet_id;
-        self.thread_pool.get_mut().map(|thread_pool| {
+        if let Some(thread_pool) = self.thread_pool.get_mut() {
             thread_pool.exit_worklet(worklet_id);
-        });
+        }
     }
 }
 
@@ -153,7 +153,7 @@ impl WorkletMethods for Worklet {
                 self.window.origin().immutable().clone(),
                 global.api_base_url(),
                 module_url_record,
-                options.credentials.clone(),
+                options.credentials,
                 pending_tasks_struct,
                 &promise,
             );
@@ -301,6 +301,7 @@ impl WorkletThreadPool {
     /// If all of the threads load successfully, the promise is resolved.
     /// If any of the threads fails to load, the promise is rejected.
     /// <https://drafts.css-houdini.org/worklets/#fetch-and-invoke-a-worklet-script>
+    #[allow(clippy::too_many_arguments)]
     fn fetch_and_invoke_a_worklet_script(
         &self,
         pipeline_id: PipelineId,
@@ -403,8 +404,8 @@ impl WorkletThreadRole {
     fn new(is_hot_backup: bool, is_cold_backup: bool) -> WorkletThreadRole {
         let (sender, receiver) = unbounded();
         WorkletThreadRole {
-            sender: sender,
-            receiver: receiver,
+            sender,
+            receiver,
             is_hot_backup,
             is_cold_backup,
         }
@@ -625,6 +626,7 @@ impl WorkletThread {
 
     /// Fetch and invoke a worklet script.
     /// <https://drafts.css-houdini.org/worklets/#fetch-and-invoke-a-worklet-script>
+    #[allow(clippy::too_many_arguments)]
     fn fetch_and_invoke_a_worklet_script(
         &self,
         global_scope: &WorkletGlobalScope,
@@ -656,7 +658,7 @@ impl WorkletThread {
         let script = load_whole_resource(
             request,
             &resource_fetcher,
-            &global_scope.upcast::<GlobalScope>(),
+            global_scope.upcast::<GlobalScope>(),
         )
         .ok()
         .and_then(|(_, bytes)| String::from_utf8(bytes).ok());
@@ -668,7 +670,7 @@ impl WorkletThread {
         // to the main script thread.
         // https://github.com/w3c/css-houdini-drafts/issues/407
         let ok = script
-            .map(|script| global_scope.evaluate_js(&*script))
+            .map(|script| global_scope.evaluate_js(&script))
             .unwrap_or(false);
 
         if !ok {
@@ -698,7 +700,7 @@ impl WorkletThread {
     fn perform_a_worklet_task(&self, worklet_id: WorkletId, task: WorkletTask) {
         match self.global_scopes.get(&worklet_id) {
             Some(global) => global.perform_a_worklet_task(task),
-            None => return warn!("No such worklet as {:?}.", worklet_id),
+            None => warn!("No such worklet as {:?}.", worklet_id),
         }
     }
 
@@ -722,7 +724,7 @@ impl WorkletThread {
                 let global =
                     self.get_worklet_global_scope(pipeline_id, worklet_id, global_type, base_url);
                 self.fetch_and_invoke_a_worklet_script(
-                    &*global,
+                    &global,
                     pipeline_id,
                     origin,
                     script_url,

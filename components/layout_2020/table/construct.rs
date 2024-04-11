@@ -56,6 +56,19 @@ pub(crate) enum AnonymousTableContent<'dom, Node> {
     },
 }
 
+impl<'dom, Node> AnonymousTableContent<'dom, Node> {
+    fn is_whitespace_only(&self) -> bool {
+        match self {
+            Self::Element { .. } => false,
+            Self::Text(_, ref text) => text.chars().all(char_is_whitespace),
+        }
+    }
+
+    fn contents_are_whitespace_only(contents: &[Self]) -> bool {
+        contents.iter().all(|content| content.is_whitespace_only())
+    }
+}
+
 impl Table {
     pub(crate) fn construct<'dom>(
         context: &LayoutContext,
@@ -477,7 +490,7 @@ impl TableBuilder {
 
     /// When not in the process of filling a cell, make sure any incoming rowspans are
     /// filled so that the next specified cell comes after them. Should have been called before
-    /// [`Self::handle_cell`].
+    /// [`Self::add_cell`]
     ///
     /// if `stop_at_cell_opportunity` is set, this will stop at the first slot with
     /// `incoming_rowspans` equal to zero. If not, it will insert [`TableSlot::Empty`] and
@@ -627,7 +640,9 @@ where
     }
 
     fn finish_anonymous_row_if_needed(&mut self) {
-        if self.current_anonymous_row_content.is_empty() {
+        if AnonymousTableContent::contents_are_whitespace_only(&self.current_anonymous_row_content)
+        {
+            self.current_anonymous_row_content.clear();
             return;
         }
 
@@ -689,9 +704,6 @@ where
     Node: NodeExt<'dom>,
 {
     fn handle_text(&mut self, info: &NodeAndStyleInfo<Node>, text: Cow<'dom, str>) {
-        if text.chars().all(char_is_whitespace) {
-            return;
-        }
         self.current_anonymous_row_content
             .push(AnonymousTableContent::Text(info.clone(), text));
     }
@@ -897,7 +909,9 @@ where
     }
 
     fn finish_current_anonymous_cell_if_needed(&mut self) {
-        if self.current_anonymous_cell_content.is_empty() {
+        if AnonymousTableContent::contents_are_whitespace_only(&self.current_anonymous_cell_content)
+        {
+            self.current_anonymous_cell_content.clear();
             return;
         }
 
@@ -947,9 +961,6 @@ where
     Node: NodeExt<'dom>,
 {
     fn handle_text(&mut self, info: &NodeAndStyleInfo<Node>, text: Cow<'dom, str>) {
-        if text.chars().all(char_is_whitespace) {
-            return;
-        }
         self.current_anonymous_cell_content
             .push(AnonymousTableContent::Text(info.clone(), text));
     }

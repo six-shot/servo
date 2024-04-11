@@ -206,7 +206,7 @@ impl Attr {
             (Some(old), None) => {
                 // Already gone from the list of attributes of old owner.
                 assert!(
-                    old.get_attribute(&ns, &self.identifier.local_name)
+                    old.get_attribute(ns, &self.identifier.local_name)
                         .as_deref() !=
                         Some(self)
                 )
@@ -240,7 +240,7 @@ impl Attr {
 #[allow(unsafe_code)]
 pub trait AttrHelpersForLayout<'dom> {
     fn value(self) -> &'dom AttrValue;
-    fn as_str(self) -> &'dom str;
+    fn as_str(&self) -> &'dom str;
     fn as_tokens(self) -> Option<&'dom [Atom]>;
     fn local_name(self) -> &'dom LocalName;
     fn namespace(self) -> &'dom Namespace;
@@ -254,8 +254,8 @@ impl<'dom> AttrHelpersForLayout<'dom> for LayoutDom<'dom, Attr> {
     }
 
     #[inline]
-    fn as_str(self) -> &'dom str {
-        &**self.value()
+    fn as_str(&self) -> &'dom str {
+        self.value()
     }
 
     #[inline]
@@ -268,11 +268,11 @@ impl<'dom> AttrHelpersForLayout<'dom> for LayoutDom<'dom, Attr> {
 
     #[inline]
     fn local_name(self) -> &'dom LocalName {
-        unsafe { &self.unsafe_get().identifier.local_name.0 }
+        &self.unsafe_get().identifier.local_name.0
     }
 
     #[inline]
     fn namespace(self) -> &'dom Namespace {
-        unsafe { &self.unsafe_get().identifier.namespace.0 }
+        &self.unsafe_get().identifier.namespace.0
     }
 }

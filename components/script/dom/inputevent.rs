@@ -22,6 +22,7 @@ pub struct InputEvent {
 }
 
 impl InputEvent {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         window: &Window,
         proto: Option<HandleObject>,
@@ -36,8 +37,8 @@ impl InputEvent {
         let ev = reflect_dom_object_with_proto(
             Box::new(InputEvent {
                 uievent: UIEvent::new_inherited(),
-                data: data,
-                is_composing: is_composing,
+                data,
+                is_composing,
             }),
             window,
             proto,

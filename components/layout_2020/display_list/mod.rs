@@ -291,7 +291,7 @@ impl Fragment {
                             spatial_id: common.spatial_id,
                             clip_chain_id: common.clip_chain_id,
                         },
-                        iframe.pipeline_id.to_webrender(),
+                        iframe.pipeline_id.into(),
                         true,
                     );
                 },
@@ -370,6 +370,25 @@ impl Fragment {
         let color = fragment.parent_style.clone_color();
         let font_metrics = &fragment.font_metrics;
         let dppx = builder.context.style_context.device_pixel_ratio().get();
+        let common = builder.common_properties(rect.to_webrender(), &fragment.parent_style);
+
+        // Shadows. According to CSS-BACKGROUNDS, text shadows render in *reverse* order (front to
+        // back).
+        let shadows = &fragment.parent_style.get_inherited_text().text_shadow;
+        for shadow in shadows.0.iter().rev() {
+            builder.wr().push_shadow(
+                &wr::SpaceAndClipInfo {
+                    spatial_id: common.spatial_id,
+                    clip_chain_id: common.clip_chain_id,
+                },
+                wr::Shadow {
+                    offset: LayoutVector2D::new(shadow.horizontal.px(), shadow.vertical.px()),
+                    color: rgba(shadow.color.resolve_to_absolute(&color)),
+                    blur_radius: shadow.blur.px(),
+                },
+                true, /* should_inflate */
+            );
+        }
 
         // Underline.
         if fragment
@@ -393,7 +412,6 @@ impl Fragment {
         }
 
         // Text.
-        let common = builder.common_properties(rect.to_webrender(), &fragment.parent_style);
         builder.wr().push_text(
             &common,
             rect.to_webrender(),
@@ -410,9 +428,12 @@ impl Fragment {
         {
             let mut rect = rect;
             rect.origin.y += Length::from(font_metrics.ascent - font_metrics.strikeout_offset);
-            // XXX(ferjm) This does not work on MacOS #942
             rect.size.height = Length::new(font_metrics.strikeout_size.to_nearest_pixel(dppx));
             self.build_display_list_for_text_decoration(fragment, builder, &rect, &color);
+        }
+
+        if !shadows.0.is_empty() {
+            builder.wr().pop_all_shadows();
         }
     }
 
@@ -756,8 +777,6 @@ impl<'a> BuilderForBoxFragment<'a> {
                 Image::PaintWorklet(_) => {
                     // TODO: Add support for PaintWorklet rendering.
                 },
-                // Gecko-only value, represented as a (boxed) empty enum on non-Gecko.
-                Image::Rect(ref rect) => match **rect {},
                 Image::ImageSet(..) | Image::CrossFade(..) => {
                     unreachable!("Shouldn't be parsed on Servo for now")
                 },
@@ -788,16 +807,13 @@ impl<'a> BuilderForBoxFragment<'a> {
         let border_widths = self
             .fragment
             .border
-            .to_physical(self.fragment.style.writing_mode);
-        let widths = SideOffsets2D::new(
-            border_widths.top.px(),
-            border_widths.right.px(),
-            border_widths.bottom.px(),
-            border_widths.left.px(),
-        );
-        if widths == SideOffsets2D::zero() {
+            .to_physical(self.fragment.style.writing_mode)
+            .to_webrender();
+
+        if border_widths == SideOffsets2D::zero() {
             return;
         }
+
         let common = builder.common_properties(self.border_rect, &self.fragment.style);
         let details = wr::BorderDetails::Normal(wr::NormalBorder {
             top: self.build_border_side(border.border_top_style, border.border_top_color.clone()),
@@ -814,7 +830,7 @@ impl<'a> BuilderForBoxFragment<'a> {
         });
         builder
             .wr()
-            .push_border(&common, self.border_rect, widths, details)
+            .push_border(&common, self.border_rect, border_widths, details)
     }
 
     fn build_outline(&mut self, builder: &mut DisplayListBuilder) {

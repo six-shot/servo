@@ -62,8 +62,8 @@ impl Worker {
     fn new_inherited(sender: Sender<DedicatedWorkerScriptMsg>, closing: Arc<AtomicBool>) -> Worker {
         Worker {
             eventtarget: EventTarget::new_inherited(),
-            sender: sender,
-            closing: closing,
+            sender,
+            closing,
             terminated: Cell::new(false),
             context_for_interrupt: Default::default(),
         }
@@ -118,12 +118,12 @@ impl Worker {
 
         let (devtools_sender, devtools_receiver) = ipc::channel().unwrap();
         let worker_id = WorkerId(Uuid::new_v4());
-        if let Some(ref chan) = global.devtools_chan() {
+        if let Some(chan) = global.devtools_chan() {
             let pipeline_id = global.pipeline_id();
             let title = format!("Worker for {}", worker_url);
             if let Some(browsing_context) = browsing_context {
                 let page_info = DevtoolsPageInfo {
-                    title: title,
+                    title,
                     url: worker_url.clone(),
                 };
                 let _ = chan.send(ScriptToDevtoolsControlMsg::NewGlobal(
@@ -267,10 +267,9 @@ impl WorkerMethods for Worker {
         self.terminated.set(true);
 
         // Step 3
-        self.context_for_interrupt
-            .borrow()
-            .as_ref()
-            .map(|cx| cx.request_interrupt());
+        if let Some(cx) = self.context_for_interrupt.borrow().as_ref() {
+            cx.request_interrupt()
+        }
     }
 
     // https://html.spec.whatwg.org/multipage/#handler-worker-onmessage

@@ -25,7 +25,7 @@ use crate::dom::NodeExt;
 use crate::dom_traversal::{Contents, NodeAndStyleInfo};
 use crate::formatting_contexts::IndependentFormattingContext;
 use crate::fragment_tree::{BoxFragment, CollapsedBlockMargins, CollapsedMargin, FloatFragment};
-use crate::geom::{LogicalRect, LogicalSides, LogicalVec2};
+use crate::geom::{LogicalRect, LogicalVec2};
 use crate::positioned::PositioningContext;
 use crate::style_ext::{ComputedValuesExt, DisplayInside, PaddingBorderMargin};
 use crate::ContainingBlock;
@@ -989,9 +989,9 @@ impl FloatBox {
                     style.clone(),
                     children,
                     content_rect,
-                    pbm.padding.into(),
-                    pbm.border.into(),
-                    margin.into(),
+                    pbm.padding,
+                    pbm.border,
+                    margin,
                     // Clearance is handled internally by the float placement logic, so there's no need
                     // to store it explicitly in the fragment.
                     None, // clearance
@@ -1062,7 +1062,7 @@ impl SequentialLayoutState {
     /// Return the current block position in the float containing block formatting
     /// context and any uncollapsed block margins.
     pub(crate) fn current_block_position_including_margins(&self) -> Au {
-        self.bfc_relative_block_position + self.current_margin.solve().into()
+        self.bfc_relative_block_position + self.current_margin.solve()
     }
 
     /// Collapses margins, moving the block position down by the collapsed value of `current_margin`
@@ -1071,7 +1071,7 @@ impl SequentialLayoutState {
     /// Call this method before laying out children when it is known that the start margin of the
     /// current fragment can't collapse with the margins of any of its children.
     pub(crate) fn collapse_margins(&mut self) {
-        self.advance_block_position(self.current_margin.solve().into());
+        self.advance_block_position(self.current_margin.solve());
         self.current_margin = CollapsedMargin::zero();
     }
 
@@ -1079,11 +1079,7 @@ impl SequentialLayoutState {
     /// with the provided `block_start_margin`, assuming no clearance.
     pub(crate) fn position_without_clearance(&self, block_start_margin: &CollapsedMargin) -> Au {
         // Adjoin `current_margin` and `block_start_margin` since there is no clearance.
-        self.bfc_relative_block_position +
-            self.current_margin
-                .adjoin(block_start_margin)
-                .solve()
-                .into()
+        self.bfc_relative_block_position + self.current_margin.adjoin(block_start_margin).solve()
     }
 
     /// Computes the position of the block-start border edge of an element
@@ -1091,9 +1087,7 @@ impl SequentialLayoutState {
     pub(crate) fn position_with_zero_clearance(&self, block_start_margin: &CollapsedMargin) -> Au {
         // Clearance prevents `current_margin` and `block_start_margin` from being
         // adjoining, so we need to solve them separately and then sum.
-        self.bfc_relative_block_position +
-            self.current_margin.solve().into() +
-            block_start_margin.solve().into()
+        self.bfc_relative_block_position + self.current_margin.solve() + block_start_margin.solve()
     }
 
     /// Returns the block-end outer edge of the lowest float that is to be cleared (if any)
@@ -1191,7 +1185,6 @@ impl SequentialLayoutState {
                 .containing_block_info
                 .block_start_margins_not_collapsed
                 .solve()
-                .into()
     }
 
     /// This function places a Fragment that has been created for a FloatBox.
@@ -1206,8 +1199,7 @@ impl SequentialLayoutState {
                 .containing_block_info
                 .block_start_margins_not_collapsed
                 .adjoin(&margins_collapsing_with_parent_containing_block)
-                .solve()
-                .into();
+                .solve();
 
         self.floats.set_ceiling_from_non_floats(
             block_start_of_containing_block_in_bfc + block_offset_from_containing_block_top,
@@ -1215,9 +1207,8 @@ impl SequentialLayoutState {
 
         let pbm_sums = &(&box_fragment.padding + &box_fragment.border) + &box_fragment.margin;
         let content_rect: LogicalRect<Au> = box_fragment.content_rect.clone().into();
-        let pbm_sums_all: LogicalSides<Au> = pbm_sums.map(|length| (*length).into());
         let margin_box_start_corner = self.floats.add_float(&PlacementInfo {
-            size: &content_rect.size + &pbm_sums_all.sum(),
+            size: &content_rect.size + &pbm_sums.sum(),
             side: FloatSide::from_style(&box_fragment.style).expect("Float box wasn't floated!"),
             clear: box_fragment.style.get_box().clear,
         });
@@ -1225,7 +1216,7 @@ impl SequentialLayoutState {
         // This is the position of the float in the float-containing block formatting context. We add the
         // existing start corner here because we may have already gotten some relative positioning offset.
         let new_position_in_bfc =
-            &(&margin_box_start_corner + &pbm_sums_all.start_offset()) + &content_rect.start_corner;
+            &(&margin_box_start_corner + &pbm_sums.start_offset()) + &content_rect.start_corner;
 
         // This is the position of the float relative to the containing block start.
         let new_position_in_containing_block = LogicalVec2 {
