@@ -68,3 +68,5 @@ support/macos/Brewfile.lock.json
 
 # direnv
 .envrc
+config.bat
+node_modules
